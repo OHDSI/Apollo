@@ -7,11 +7,33 @@ This Python package is for building and evaluating large general pre-trained mod
 # Overview
 This package assumes the [GeneralPretrainedModelTools](https://github.com/OHDSI/GeneralPretrainedModelTools) R package has been executed to retrieve (a sample of) the CDM data to local Parquet files. After this, a 'cdm_processor' must be run to convert the data to sequence data suitable for a large language model. TODO: how to go from here. 
 
-## Python version
+## Getting Started
 
-Currently developing against Pytohn 3.10
+### Pre-requisite
+The project is built in python 3.10, and project dependency needs to be installed 
 
-# License
+Create a new Python virtual environment
+```console
+python -m venv venv;
+source venv/bin/activate;
+```
+
+Install the packages in requirements.txt
+```console
+pip install -r requirements.txt
+```
+
+### Procesing CDM data for CEHR-BERT
+
+1. Edit cehr-bert.ini to point to folders on the local file system.
+
+2. Run:
+
+    ```python
+	python cdm_processing/cehr_bert_cdm_processor.py cehr_bert.ini
+	```
+
+## License
 
 Apollo is licensed under Apache License 2.0.
 

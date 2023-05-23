@@ -7,6 +7,7 @@ import logging
 import configparser
 
 import pandas as pd
+import numpy as np
 
 from cdm_processing.abstract_cdm_processor import AbstractToParquetCdmDataProcessor
 import cdm_processing.cdm_processor_utils as cpu
@@ -88,15 +89,15 @@ class OutputRow:
             {
                 "cohort_member_id": self.cohort_member_id,
                 "person_id": self.person_id,
-                "concept_ids": self.concept_ids,
-                "visit_segments": self.visit_segments,
-                "orders": self.orders,
-                "dates": self.dates,
-                "ages": self.ages,
-                "visit_concept_orders": self.visit_concept_orders,
+                "concept_ids": np.array(self.concept_ids),
+                "visit_segments": np.array(self.visit_segments, dtype=np.int32),
+                "orders": np.array(self.orders, dtype=np.int32),
+                "dates": np.array(self.dates, dtype=np.int32),
+                "ages": np.array(self.ages, dtype=np.int32),
+                "visit_concept_orders": np.array(self.visit_concept_orders, dtype=np.int32),
                 "num_of_visits": self.num_of_visits,
                 "num_of_concepts": self.num_of_concepts,
-                "visit_concept_ids": self.visit_concept_ids,
+                "visit_concept_ids": np.array(self.visit_concept_ids),
             }
         ).to_frame().transpose()
         return output_row
@@ -228,4 +229,7 @@ def main(args):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    if (len(sys.argv) != 2):
+        raise Exception("Must provide path to ini file as argument")
+    else :
+        main(sys.argv[1:])
