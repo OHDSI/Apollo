@@ -186,7 +186,7 @@ class CehrBertCdmDataProcessor(AbstractToParquetCdmDataProcessor):
                 output_row.dates.append(0)
                 output_row.ages.append(-1)
                 output_row.visit_concept_orders.append(visit_rank)
-                output_row.visit_concept_ids.append('0')
+                output_row.visit_concept_ids.append("0")
             visit_end_date = visit_group.visit["visit_end_date"]
             event_table = cpu.union_domain_tables(visit_group.cdm_tables)
             visit_token_len = len(event_table) + 2
