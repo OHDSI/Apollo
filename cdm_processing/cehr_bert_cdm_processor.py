@@ -89,7 +89,7 @@ class OutputRow:
             {
                 "cohort_member_id": self.cohort_member_id,
                 "person_id": self.person_id,
-                "concept_ids": np.array(self.concept_ids),
+                "concept_ids": np.array(self.concept_ids, dtype=str),
                 "visit_segments": np.array(self.visit_segments, dtype=np.int32),
                 "orders": np.array(self.orders, dtype=np.int32),
                 "dates": np.array(self.dates, dtype=np.int32),
@@ -97,7 +97,7 @@ class OutputRow:
                 "visit_concept_orders": np.array(self.visit_concept_orders, dtype=np.int32),
                 "num_of_visits": self.num_of_visits,
                 "num_of_concepts": self.num_of_concepts,
-                "visit_concept_ids": np.array(self.visit_concept_ids),
+                "visit_concept_ids": np.array(self.visit_concept_ids, dtype=str),
             }
         ).to_frame().transpose()
         return output_row
@@ -185,13 +185,13 @@ class CehrBertCdmDataProcessor(AbstractToParquetCdmDataProcessor):
                 output_row.visit_segments.append(0)
                 output_row.dates.append(0)
                 output_row.ages.append(-1)
-                output_row.visit_concept_orders.append(visit_rank + 1)
-                output_row.visit_concept_ids.append(0)
+                output_row.visit_concept_orders.append(visit_rank)
+                output_row.visit_concept_ids.append('0')
             visit_end_date = visit_group.visit["visit_end_date"]
             event_table = cpu.union_domain_tables(visit_group.cdm_tables)
             visit_token_len = len(event_table) + 2
             output_row.concept_ids.append(VISIT_START)
-            output_row.concept_ids.extend(event_table[CONCEPT_ID].astype(str).to_list())
+            output_row.concept_ids.extend(event_table[CONCEPT_ID].astype(int).astype(str).to_list())
             output_row.concept_ids.append(VISIT_END)
             output_row.visit_segments.extend([visit_rank % 2 + 1] * visit_token_len)
             output_row.dates.append(_days_to_weeks((visit_group.visit_start_date - EPOCH).days))
@@ -201,7 +201,7 @@ class CehrBertCdmDataProcessor(AbstractToParquetCdmDataProcessor):
             output_row.ages.extend(event_table[START_DATE].apply(lambda x: _days_to_months((x - date_of_birth).days)))
             output_row.ages.append(_days_to_months((visit_end_date - date_of_birth).days))
             output_row.visit_concept_orders.extend([visit_rank] * visit_token_len)
-            output_row.visit_concept_ids.extend([visit_group.visit[cpu.VISIT_CONCEPT_ID]] * visit_token_len)
+            output_row.visit_concept_ids.extend([str(int(visit_group.visit[cpu.VISIT_CONCEPT_ID]))] * visit_token_len)
             previous_visit_end_date = visit_end_date
             self._processing_statistics.record_visit_mapping_stats(visit_group)
         output_row.orders = list(range(0, len(output_row.concept_ids)))
@@ -211,7 +211,7 @@ class CehrBertCdmDataProcessor(AbstractToParquetCdmDataProcessor):
             self._output.append(output_row.to_pandas())
 
 
-def main(args):
+def main(args: List[str]):
     config = configparser.ConfigParser()
     config.read(args[0])
     my_cdm_data_processor = CehrBertCdmDataProcessor(
@@ -231,5 +231,5 @@ def main(args):
 if __name__ == "__main__":
     if (len(sys.argv) != 2):
         raise Exception("Must provide path to ini file as argument")
-    else :
+    else:
         main(sys.argv[1:])
