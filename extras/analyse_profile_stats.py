@@ -1,3 +1,5 @@
+# Code to display the results of profiling
+
 import pstats
 from pstats import SortKey
 p = pstats.Stats('../stats')
