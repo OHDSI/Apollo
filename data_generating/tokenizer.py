@@ -1,7 +1,9 @@
 import json
 
 from data_generating.parquet_data_iterator import ParquetDataIterator
-from typing import List
+from typing import List, Union
+
+import numpy as np
 
 UNUSED_TOKEN = "[UNUSED]"
 MASK_TOKEN = "[MASK]"
@@ -39,14 +41,14 @@ class ConceptTokenizer:
         self._unused_token_index = self._word_index[UNUSED_TOKEN]
         self._mask_token_index = self._word_index[MASK_TOKEN]
 
-    def encode(self, concept_ids: List[str]) -> List[int]:
+    def encode(self, concept_ids: Union[List[str], np.ndarray[str]]) -> List[int]:
         result = []
-        for w in concept_ids:
-            i = self._word_index.get(w)
-            if i is None:
+        for word in concept_ids:
+            idx = self._word_index.get(word)
+            if idx is None:
                 result.append(self._oov_token_index)
             else:
-                result.append(i)
+                result.append(idx)
         return result
 
     def decode(self, concept_token_ids: List[int]) -> List[str]:

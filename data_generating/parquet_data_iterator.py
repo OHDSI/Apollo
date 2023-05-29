@@ -7,15 +7,15 @@ import pyarrow.parquet as pq
 class ParquetDataIterator():
     """Iterate over rows in parquet files"""
 
-    def __init__(self, parquet_path: str):
+    def __init__(self, parquet_folder_name: str):
         """
         Initialization
 
         Args:
-            parquet_path: Path to the folder containing the parquet files.
+            parquet_folder_name: Path to the folder containing the parquet files.
         """
-        self._parquet_path = parquet_path
-        self._dataset = pq.ParquetDataset(parquet_path)
+        self._parquet_path = parquet_folder_name
+        self._dataset = pq.ParquetDataset(parquet_folder_name)
         self._nrows = sum(fragment.count_rows() for fragment in self._dataset.fragments)
         self._iterator = self.__iter__() # Used by __next__
 

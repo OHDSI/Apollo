@@ -61,7 +61,7 @@ class BertFineTuningLearningObjective(LearningObjective):
 
 class VisitPredictionLearningObjective(LearningObjective):
 
-    def __init__(self, work_folder: str, reuse_tokenizer: bool, is_training: bool):
+    def __init__(self, work_folder: str, reuse_tokenizer: bool):
         """
         Initialization
         Args:
