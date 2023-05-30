@@ -66,6 +66,12 @@ class ConceptTokenizer:
     def get_out_of_vocabulary_token_id(self):
         return self._oov_token_index
 
+    def get_first_token_id(self):
+        return 4
+
+    def get_last_token_id(self):
+        return self.get_vocab_size() - 1
+
     def save_to_json(self, file_name: str):
         with open(file_name, "w") as f:
             json.dump(self._word_index, f)

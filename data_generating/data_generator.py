@@ -53,13 +53,15 @@ class DataGenerator:
 
     def __len__(self) -> int:
         """The number of batches per epoch"""
-        return int(np.floor(self._nrows / self._batch_size))
+        return int(np.ceil(self._nrows / self._batch_size))
 
-    def __iter__(self) -> Iterator[tuple[Dict, Dict]]:
-        """Iterate over batches"""
+    def generator(self) -> Iterator[tuple[Dict, Dict]]:
+        """Generate data for tensorflow"""
         while True:
-            for batch in self._get_batch():
-                yield batch
+            try:
+                yield self._get_batch()
+            except StopIteration:
+                break
 
     def _get_batch(self) -> tuple[Dict, Dict]:
         """Get a batch of data for tensorflow"""

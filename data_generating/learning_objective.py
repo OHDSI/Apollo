@@ -1,19 +1,35 @@
 import os
 import random
 from abc import ABC, abstractmethod
-from itertools import islice
 from typing import Dict
 
 import numpy as np
 import pandas as pd
-from keras.utils import pad_sequences
 import tensorflow as tf
 
 from data_generating import tokenizer
 from data_generating.parquet_data_iterator import ParquetDataIterator
 
 
+def _pad_sequence(sequence: np.ndarray[any], padding_value: any, max_sequence_length: int) -> np.ndarray[any]:
+    """
+    Pad a sequence to a given length.
+    :param sequence: The sequence to pad.
+    :param max_sequence_length: The length to pad to.
+    :param padding_value: The value to pad with.
+    :return: The padded sequence.
+    """
+    n_to_pad = max_sequence_length - len(sequence)
+    if n_to_pad > 0:
+        sequence = np.append(sequence, [padding_value] * n_to_pad)
+    return sequence
+
+
 class LearningObjective(ABC):
+    """
+    A learning objective is a task that can be learned from the data. For example, predicting the next visit. This
+    class is used to generate the data for the learning objective.
+    """
 
     @abstractmethod
     def initialize(self, parquet_data_iterator: ParquetDataIterator, max_sequence_length: int, is_training: bool):
@@ -61,7 +77,7 @@ class BertFineTuningLearningObjective(LearningObjective):
 
 class VisitPredictionLearningObjective(LearningObjective):
 
-    def __init__(self, work_folder: str, reuse_tokenizer: bool):
+    def __init__(self, work_folder: str, reuse_tokenizer: bool = True):
         """
         Initialization
         Args:
@@ -74,7 +90,7 @@ class VisitPredictionLearningObjective(LearningObjective):
         self._max_sequence_length = None
 
     def initialize(self, parquet_data_iterator: ParquetDataIterator, max_sequence_length: int, is_training: bool):
-        json_file = os.path.join(self._work_folder, "visit_tokenizer.json")
+        json_file = os.path.join(self._work_folder, "_visit_tokenizer.json")
         if self._reuse_tokenizer and os.path.exists(json_file):
             self._visit_tokenizer = tokenizer.load_from_json(json_file)
         else:
@@ -92,19 +108,15 @@ class VisitPredictionLearningObjective(LearningObjective):
         return input_dict_schema, output_dict_schema
 
     def process_row(self, row: pd.DataFrame, start_index: int, end_index: int) -> tuple[Dict, Dict]:
-        visit_concept_ids = list(islice(row.visit_concept_ids, start_index, end_index))
+        visit_concept_ids = row.visit_concept_ids[start_index:end_index]
         visit_token_ids = self._visit_tokenizer.encode(visit_concept_ids)
         masked_visit_token_ids, output_mask = self._mask_visit_concepts(visit_token_ids)
-        masked_visit_token_ids = pad_sequences(sequences=np.asarray(masked_visit_token_ids),
-                                               maxlen=self._max_sequence_length,
-                                               padding="post",
-                                               value=self._visit_tokenizer.get_unused_token_id(),
-                                               dtype="int32")
-        visit_token_ids = pad_sequences(sequences=np.asarray(masked_visit_token_ids),
-                                        maxlen=self._max_sequence_length,
-                                        padding="post",
-                                        value=self._visit_tokenizer.get_unused_token_id(),
-                                        dtype="int32")
+        masked_visit_token_ids = _pad_sequence(sequence=masked_visit_token_ids,
+                                               padding_value=self._visit_tokenizer.get_unused_token_id(),
+                                               max_sequence_length=self._max_sequence_length)
+        visit_token_ids = _pad_sequence(sequence=masked_visit_token_ids,
+                                        padding_value=self._visit_tokenizer.get_unused_token_id(),
+                                        max_sequence_length=self._max_sequence_length)
         visit_mask = (visit_token_ids == self._visit_tokenizer.get_unused_token_id()).astype(int)
         combined_label = np.stack([visit_token_ids, output_mask], axis=-1)
         input_dict = {
@@ -126,7 +138,7 @@ class VisitPredictionLearningObjective(LearningObjective):
 
 class MaskedLanguageModelLearningObjective(LearningObjective):
 
-    def __init__(self, work_folder: str, reuse_tokenizer):
+    def __init__(self, work_folder: str, reuse_tokenizer: bool = True):
         """
         Initialization
         Args:
@@ -134,14 +146,13 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
             reuse_tokenizer: If true, the tokenizer will be loaded from the work_folder if it exists.
         """
         self._work_folder = work_folder
-        self._visit_tokenizer = None
         self._reuse_tokenizer = reuse_tokenizer
         self._concept_tokenizer = None
         self._max_sequence_length = None
         self._is_training = None
 
     def initialize(self, parquet_data_iterator: ParquetDataIterator, max_sequence_length: int, is_training: bool):
-        json_file = os.path.join(self._work_folder, "concept_tokenizer.json")
+        json_file = os.path.join(self._work_folder, "_concept_tokenizer.json")
         if self._reuse_tokenizer and os.path.exists(json_file):
             self._concept_tokenizer = tokenizer.load_from_json(json_file)
         else:
@@ -165,47 +176,35 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
         return input_dict_schema, output_dict_schema
 
     def process_row(self, row: pd.DataFrame, start_index: int, end_index: int) -> tuple[Dict, Dict]:
-        concept_ids = list(islice(row.concept_ids, start_index, end_index))
-        visit_segments = list(islice(row.visit_segments, start_index, end_index))
-        dates = list(islice(row.dates, start_index, end_index))
-        ages = list(islice(row.ages, start_index, end_index))
-        visit_concept_orders = list(islice(row.visit_concept_orders, start_index, end_index))
+        concept_ids = row.concept_ids[start_index:end_index]
+        visit_segments = row.visit_segments[start_index:end_index]
+        dates = row.dates[start_index:end_index]
+        ages = row.ages[start_index:end_index]
+        visit_concept_orders = row.visit_concept_orders[start_index:end_index]
 
-        token_ids = self._visit_tokenizer.encode(concept_ids)
+        token_ids = self._concept_tokenizer.encode(concept_ids)
         # Normalize the visit_orders using the smallest visit_concept_orders
         visit_concept_orders = visit_concept_orders - min(visit_concept_orders)
         masked_token_ids, output_mask = self._mask_concepts(token_ids)
 
-        token_ids = pad_sequences(sequences=np.asarray(token_ids),
-                                  maxlen=self._max_sequence_length,
-                                  padding="post",
-                                  value=self._concept_tokenizer.get_unused_token_id(),
-                                  dtype="int32")
-        masked_token_ids = pad_sequences(sequences=np.asarray(masked_token_ids),
-                                         maxlen=self._max_sequence_length,
-                                         padding="post",
-                                         value=self._concept_tokenizer.get_unused_token_id(),
-                                         dtype="int32")
-        visit_segments = pad_sequences(sequences=np.asarray(visit_segments),
-                                       maxlen=self._max_sequence_length,
-                                       padding="post",
-                                       value=self._max_sequence_length,
-                                       dtype="int32")
-        dates = pad_sequences(sequences=np.asarray(dates),
-                              maxlen=self._max_sequence_length,
-                              padding="post",
-                              value=self._max_sequence_length,
-                              dtype="int32")
-        ages = pad_sequences(sequences=np.asarray(ages),
-                             maxlen=self._max_sequence_length,
-                             padding="post",
-                             value=self._max_sequence_length,
-                             dtype="int32")
-        visit_concept_orders = pad_sequences(sequences=np.asarray(visit_concept_orders),
-                                             maxlen=self._max_sequence_length,
-                                             padding="post",
-                                             value=self._max_sequence_length - 1,
-                                             dtype="int32")
+        token_ids = _pad_sequence(sequence=token_ids,
+                                  padding_value=self._concept_tokenizer.get_unused_token_id(),
+                                  max_sequence_length=self._max_sequence_length)
+        masked_token_ids = _pad_sequence(sequence=masked_token_ids,
+                                         padding_value=self._concept_tokenizer.get_unused_token_id(),
+                                         max_sequence_length=self._max_sequence_length)
+        visit_segments = _pad_sequence(sequence=visit_segments,
+                                       padding_value=self._max_sequence_length,
+                                       max_sequence_length=self._max_sequence_length)
+        dates = _pad_sequence(sequence=dates,
+                              padding_value=self._max_sequence_length,
+                              max_sequence_length=self._max_sequence_length)
+        ages = _pad_sequence(sequence=ages,
+                             padding_value=self._max_sequence_length,
+                             max_sequence_length=self._max_sequence_length)
+        visit_concept_orders = _pad_sequence(sequence=visit_concept_orders,
+                                             padding_value=self._max_sequence_length - 1,
+                                             max_sequence_length=self._max_sequence_length)
 
         output_mask = (token_ids == self._concept_tokenizer.get_unused_token_id()).astype(int)
         combined_label = np.stack([token_ids, output_mask], axis=-1)
@@ -221,7 +220,7 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
         return input_dict, output_dict
 
     def _mask_concepts(self, concepts):
-        masked_concepts = np.asarray(concepts).copy()
+        masked_concepts = concepts.copy()
         output_mask = np.zeros((self._max_sequence_length,), dtype=int)
         if self._is_training:
             for word_pos in range(0, len(concepts)):
@@ -234,8 +233,8 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
                         masked_concepts[word_pos] = self._concept_tokenizer.get_mask_token_id()
                     elif dice < 0.9:
                         masked_concepts[word_pos] = random.randint(
-                            self._concept_tokenizer.get_first_token_index(),
-                            self._concept_tokenizer.get_last_token_index())
+                            self._concept_tokenizer.get_first_token_id(),
+                            self._concept_tokenizer.get_last_token_id())
                     # else: 10% of the time we just leave the token as is
                     output_mask[word_pos] = 1
 

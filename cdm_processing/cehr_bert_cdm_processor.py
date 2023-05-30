@@ -85,21 +85,21 @@ class OutputRow:
         self.num_of_concepts = 0
 
     def to_pandas(self) -> pd.DataFrame:
-        output_row = pd.Series(
+        output_row = pd.DataFrame(
             {
-                "cohort_member_id": self.cohort_member_id,
-                "person_id": self.person_id,
-                "concept_ids": np.array(self.concept_ids, dtype=str),
-                "visit_segments": np.array(self.visit_segments, dtype=np.int32),
-                "orders": np.array(self.orders, dtype=np.int32),
-                "dates": np.array(self.dates, dtype=np.int32),
-                "ages": np.array(self.ages, dtype=np.int32),
-                "visit_concept_orders": np.array(self.visit_concept_orders, dtype=np.int32),
-                "num_of_visits": self.num_of_visits,
-                "num_of_concepts": self.num_of_concepts,
-                "visit_concept_ids": np.array(self.visit_concept_ids, dtype=str),
+                "cohort_member_id": [self.cohort_member_id],
+                "person_id": [self.person_id],
+                "concept_ids": [np.array(self.concept_ids, dtype=str)],
+                "visit_segments": [np.array(self.visit_segments, dtype=np.int32)],
+                "orders": [np.array(self.orders, dtype=np.int32)],
+                "dates": [np.array(self.dates, dtype=np.int32)],
+                "ages": [np.array(self.ages, dtype=np.int32)],
+                "visit_concept_orders": [np.array(self.visit_concept_orders, dtype=np.int32)],
+                "num_of_visits": [self.num_of_visits],
+                "num_of_concepts": [self.num_of_concepts],
+                "visit_concept_ids": [np.array(self.visit_concept_ids, dtype=str)],
             }
-        ).to_frame().transpose()
+        )
         return output_row
 
 
@@ -148,6 +148,8 @@ class CehrBertCdmDataProcessor(AbstractToParquetCdmDataProcessor):
         super()._finish_partition(partition_i=partition_i)
 
     def _process_person(self, person_id: int, cdm_tables: Dict[str, pd.DataFrame]):
+        if len(self._output) > 1000:
+            return
         self._processing_statistics.record_person()
         cdm_tables, removed_row_counts = cpu.remove_concepts(cdm_tables=cdm_tables,
                                                              concept_ids=self._concepts_to_remove)
