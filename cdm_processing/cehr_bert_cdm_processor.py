@@ -216,7 +216,7 @@ class CehrBertCdmDataProcessor(AbstractToParquetCdmDataProcessor):
 def main(args: List[str]):
     config = configparser.ConfigParser()
     config.read(args[0])
-    my_cdm_data_processor = CehrBertCdmDataProcessor(
+    cdm_data_processor = CehrBertCdmDataProcessor(
         cdm_data_path=config["system"].get("cdm_data_path"),
         max_cores=config["system"].getint("max_cores"),
         output_path=config["system"].get("output_path"),
@@ -224,10 +224,13 @@ def main(args: List[str]):
         concepts_to_remove=[int(x) for x in config["mapping"].get("concepts_to_remove").split(",")],
     )
     if config["debug"].getboolean("profile"):
-        my_cdm_data_processor._max_cores = -1
-        cProfile.run("my_cdm_data_processor.process_cdm_data()", "../stats")
+        cdm_data_processor._max_cores = -1
+        cProfile.runctx(statement="cdm_data_processor.process_cdm_data()",
+                        locals={"cdm_data_processor": cdm_data_processor},
+                        globals={},
+                        filename="../stats")
     else:
-        my_cdm_data_processor.process_cdm_data()
+        cdm_data_processor.process_cdm_data()
 
 
 if __name__ == "__main__":
