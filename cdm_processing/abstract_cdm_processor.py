@@ -1,3 +1,4 @@
+import cProfile
 from abc import ABC, abstractmethod
 from multiprocessing import Pool
 import os
@@ -25,6 +26,15 @@ CDM_TABLES = [
 ]
 PERSON_ID = "person_id"
 LOGGER_FILE_NAME = "_cdm_processing_log.txt"  # Start with underscore so ignored by Parquet
+PROFILE_MAX_PERSONS = 1000
+
+
+def int_columns_to_nullable_int(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Convert all integer columns in a dataframe to nullable integers, including columns that were stored as objects
+    by pyarrow to allow for nulls.
+    """
+    return df.astype({col: "Int64" for col in df.select_dtypes(["int64", "object"]).columns})
 
 
 class AbstractCdmDataProcessor(ABC):
@@ -47,7 +57,14 @@ class AbstractCdmDataProcessor(ABC):
         self._max_cores = max_cores
         self._person_partition_count = 0
         self._output_path = output_path
+        self._profile = False
         self._configure_logger()
+
+    def set_profile(self, profile: bool):
+        self._profile = profile
+
+    def get_profile(self):
+        return self._profile
 
     def _configure_logger(self):
         create_logger(os.path.join(self._output_path, LOGGER_FILE_NAME))
@@ -76,11 +93,23 @@ class AbstractCdmDataProcessor(ABC):
         """
         Process the CDM data in the provided cdm_data_path.
         """
+        if self._profile:
+            cProfile.runctx(statement="self._process_cdm_data()",
+                            locals={"self": self},
+                            globals={},
+                            filename="../stats")
+        else:
+            self._process_cdm_data()
+
+    def _process_cdm_data(self):
         self._get_partition_counts()
         self._prepare()
-        if self._max_cores == -1:
-            # For profiling, run small set of partitions in main thread:
-            self._person_partition_count = 1
+        if self._profile:
+            logging.info(
+                f"Profiling mode enabled, running first {PROFILE_MAX_PERSONS} persons of 1st partition in single thread")
+            self._process_partition(0)
+        elif self._max_cores == 1:
+            # Run single thread in main thread for easier debugging:
             for partition_i in range(self._person_partition_count):
                 self._process_partition(partition_i)
         else:
@@ -113,6 +142,7 @@ class AbstractCdmDataProcessor(ABC):
         table_person_datas = {}
         for table_name, table_iterator in table_iterators.items():
             table_person_datas[table_name] = next(table_iterator, None)
+        person_count = 0
         for person in self._create_table_iterator(
                 table_name=PERSON, partition_i=partition_i
         ):
@@ -132,6 +162,10 @@ class AbstractCdmDataProcessor(ABC):
                 else:
                     table_person_datas[table_name] = table_person_data
             self._process_person(person_id=person_id, cdm_tables=cdm_tables)
+            person_count += 1
+            if self._profile and person_count == PROFILE_MAX_PERSONS:
+                logging.info(f"Profiling mode enabled, stopping after {PROFILE_MAX_PERSONS} persons")
+                break
         self._finish_partition(partition_i)
         logging.debug("Finished partition %s of %s", partition_i, self._person_partition_count)
 
@@ -150,15 +184,18 @@ class AbstractCdmDataProcessor(ABC):
         buffer = None
         buffer_person_id = None
         for batch in table.to_batches():
-            batch = batch.to_pandas()
-            # batch.columns = batch.columns.str.lower()
+            # integer_object_nulls=True is needed to avoid loss of precision when converting int64 fields with nulls,
+            # which would otherwise be converted to float64. We then convert the object columns to nullable int64.
+            # It is unclear why dates are by default converted to objects, which is a terrible idea.
+            batch = batch.to_pandas(integer_object_nulls=True, date_as_object=False, timestamp_as_object=False)
+            batch = int_columns_to_nullable_int(batch)
             for person_id, group in batch.groupby(PERSON_ID, as_index=False):
                 if buffer_person_id is None:
                     buffer = group
                     buffer_person_id = person_id
                 else:
                     if buffer_person_id == person_id:
-                        buffer = pd.concat([buffer, group])
+                        buffer = pd.concat([buffer, group], ignore_index=True)
                     else:
                         yield buffer
                         buffer = group
@@ -196,6 +233,6 @@ class AbstractToParquetCdmDataProcessor(AbstractCdmDataProcessor):
             file_name = "part{:04d}.parquet".format(partition_i + 1)
             logging.debug("Writing data for partition %s to '%s'", partition_i, file_name)
             pq.write_table(
-                table=pa.Table.from_pandas(df=pd.concat(self._output), nthreads=1),
+                table=pa.Table.from_pandas(df=pd.concat(self._output, ignore_index=True), nthreads=1),
                 where=os.path.join(self._output_path, file_name),
             )

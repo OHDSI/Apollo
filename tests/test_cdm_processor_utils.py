@@ -1,5 +1,4 @@
 from typing import Dict, List, Any
-import datetime as dt
 
 import pytest
 import pandas as pd
@@ -99,7 +98,7 @@ def test_call_per_observation_period(cdm_tables: Dict[str, pd.DataFrame]):
     assert len(visits) == 1
 
 def test_remove_concepts(cdm_tables: Dict[str, pd.DataFrame]):
-    new_cdm_tables, removed_counts = cpu.remove_concepts(cdm_tables)
+    new_cdm_tables, removed_counts = cpu.remove_concepts(cdm_tables=cdm_tables, concept_ids=[0])
     assert removed_counts["condition_occurrence"] == 1
     assert len(new_cdm_tables["condition_occurrence"] == 2)
 
@@ -123,7 +122,7 @@ def test_get_date_of_birth():
         }
     )
     dob = cpu.get_date_of_birth(person)
-    assert dob == dt.datetime(1970, 5, 7).date()
+    assert dob == pd.Timestamp(1970, 5, 7)
 
     person = pd.Series(
         {
@@ -135,7 +134,7 @@ def test_get_date_of_birth():
         }
     )
     dob = cpu.get_date_of_birth(person)
-    assert dob == dt.datetime(1980, 4, 1).date()
+    assert dob == pd.Timestamp(1980, 4, 1)
 
     person = pd.Series(
         {
@@ -147,7 +146,7 @@ def test_get_date_of_birth():
         }
     )
     dob = cpu.get_date_of_birth(person)
-    assert dob == dt.datetime(1990, 1, 1).date()
+    assert dob == pd.Timestamp(1990, 1, 1)
 
 
 def test_group_by_visit(cdm_tables: Dict[str, pd.DataFrame]):

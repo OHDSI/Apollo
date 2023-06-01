@@ -31,3 +31,16 @@ def create_logger(log_file_name: str):
     if not len(logger.handlers):
         _add_file_handler(logger=logger, log_file_name=log_file_name)
         _add_stream_handler(logger=logger)
+
+class _ConfigLogger(object):
+
+    def log_config(self, config):
+        logging.info("Config:")
+        config.write(self)
+    def write(self, data):
+        line = data.strip()
+        logging.info(line)
+
+def log_config(config):
+    config_logger = _ConfigLogger()
+    config_logger.log_config(config)

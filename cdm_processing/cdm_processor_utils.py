@@ -1,5 +1,4 @@
 from typing import Dict, List, Callable
-import datetime as dt
 import os
 
 import pandas as pd
@@ -83,9 +82,7 @@ def call_per_observation_period(
                   the observation_period (Series), and a dictionary of CDM tables.
     """
     for index, observation_period in cdm_tables[OBSERVATION_PERIOD].iterrows():
-        observation_period_start_date = observation_period[
-            OBSERVATION_PERIOD_START_DATE
-        ]
+        observation_period_start_date = observation_period[OBSERVATION_PERIOD_START_DATE]
         observation_period_end_date = observation_period[OBSERVATION_PERIOD_END_DATE]
         new_cdm_tables = {}
         for table_name, table in cdm_tables.items():
@@ -94,7 +91,7 @@ def call_per_observation_period(
                 table = table[
                     (start_dates >= observation_period_start_date)
                     & (start_dates <= observation_period_end_date)
-                    ].copy()
+                    ].copy().reset_index(drop=True)
             new_cdm_tables[table_name] = table
         function(observation_period, new_cdm_tables)
 
@@ -119,7 +116,7 @@ def remove_concepts(cdm_tables: Dict[str, pd.DataFrame], concept_ids: List[int])
         if table_name in CONCEPT_ID_FIELDS:
             idx = [x not in concept_ids for x in cdm_table[CONCEPT_ID_FIELDS[table_name]]]
             removed_row_counts[table_name] = len(idx) - sum(idx)
-            cdm_table = cdm_table[idx].copy()
+            cdm_table = cdm_table[idx].copy().reset_index(drop=True)
         new_cdm_tables[table_name] = cdm_table
     return new_cdm_tables, removed_row_counts
 
@@ -172,7 +169,7 @@ def union_domain_tables(cdm_tables: Dict[str, pd.DataFrame], include_person_id=F
         return result
 
 
-def get_date_of_birth(person: pd.Series) -> dt.date:
+def get_date_of_birth(person: pd.Series) -> pd.Timestamp:
     """
     Computes a date of birth from a person entry
 
@@ -186,7 +183,7 @@ def get_date_of_birth(person: pd.Series) -> dt.date:
         month = 1
     if pd.isna(day):
         day = 1
-    return dt.date(year=int(year), month=int(month), day=int(day))
+    return pd.Timestamp(year=int(year), month=int(month), day=int(day))
 
 
 class VisitData:
@@ -195,7 +192,7 @@ class VisitData:
     """
 
     visit: pd.Series
-    visit_start_date: dt.date
+    visit_start_date: pd.Timestamp
     cdm_tables: Dict[str, pd.DataFrame]
     mapped_by_id: int
     mapped_by_date: int
@@ -237,9 +234,23 @@ def group_by_visit(
     if VISIT_OCCURRENCE in cdm_tables:
         visits = cdm_tables[VISIT_OCCURRENCE]
     else:
-        visits = pd.DataFrame()
-    visit_indices = list(range(len(visits)))
+        visits = pd.DataFrame({PERSON_ID: [],
+                               VISIT_OCCURRENCE_ID: [],
+                               VISIT_START_DATE: [],
+                               VISIT_END_DATE: [],
+                               VISIT_CONCEPT_ID: []})
     visit_datas = [VisitData(visits.iloc[i]) for i in range(len(visits))]
+    visit_id_to_index = {visit_id: i for i, visit_id in enumerate(visits[VISIT_OCCURRENCE_ID])}
+    last_old_visit_index = len(visits) - 1
+    visit_date_to_index = {}
+    if link_by_date:
+        # Note: datetime.datetime values tend to be automatically converted to timestamps, breaking the dictionary
+        # lookups. Therefore, forcing pandas timestamps everywhere.
+        visit_start_dates = visits[VISIT_START_DATE].to_numpy()
+        visit_end_dates = visits[VISIT_END_DATE].to_numpy()
+        for i in range(len(visits)):
+            for date in pd.date_range(visit_start_dates[i], visit_end_dates[i]):
+                visit_date_to_index[date] = i
     for table_name in DOMAIN_TABLES:
         if table_name in cdm_tables:
             cdm_table = cdm_tables[table_name]
@@ -251,17 +262,7 @@ def group_by_visit(
                 event_visit_index.fill(-1)
             else:
                 if VISIT_OCCURRENCE_ID in cdm_table:
-                    event_visit_index = np.piecewise(
-                        np.zeros(len(cdm_table), dtype=int),
-                        [
-                            (
-                                    cdm_table[VISIT_OCCURRENCE_ID].values
-                                    == visit_occurrence_id
-                            )
-                            for visit_occurrence_id in zip(visits[VISIT_OCCURRENCE_ID].values)
-                        ],
-                        np.append(visit_indices, -1),
-                    )
+                    event_visit_index = np.array([visit_id_to_index.get(x, -1) for x in cdm_table[VISIT_OCCURRENCE_ID]])
                     index, count = np.unique(event_visit_index, return_counts=True)
                     for i in range(len(index)):
                         if index[i] != -1:
@@ -273,18 +274,9 @@ def group_by_visit(
                 if link_by_date:
                     idx = event_visit_index == -1
                     if any(idx):
-                        event_visit_index[idx] = np.piecewise(
-                            np.zeros(sum(idx), dtype=int),
-                            [
-                                (cdm_table.loc[idx, start_date_field].values >= start_date)
-                                & (cdm_table.loc[idx, start_date_field].values <= end_date)
-                                for start_date, end_date in zip(
-                                    visits[VISIT_START_DATE].values,
-                                    visits[VISIT_END_DATE].values,
-                                )
-                            ],
-                            np.append(visit_indices, -1),
-                        )
+                        idx = event_visit_index == -1
+                        event_visit_index[idx] = [visit_date_to_index.get(x, -1) for x in
+                                                  pd.to_datetime(cdm_table.loc[idx, start_date_field])]
                         index, count = np.unique(event_visit_index[idx], return_counts=True)
                         for i in range(len(index)):
                             if index[i] != -1:
@@ -293,41 +285,34 @@ def group_by_visit(
                 idx = event_visit_index == -1
                 if any(idx):
                     dates = cdm_table.loc[idx, start_date_field].unique()
-                    person_id = cdm_table[PERSON_ID].iat[0]
-                    missing_visit_indices = list(
-                        range(len(visits), len(visits) + len(dates))
-                    )
+                    person_id = cdm_table[PERSON_ID][0]
+                    missing_visit_date_to_index = {visit_date: i + len(visit_datas) for i, visit_date in
+                                                   enumerate(dates)}
                     missing_visits = pd.DataFrame(
                         {
-                            PERSON_ID: [person_id] * len(dates),
-                            VISIT_OCCURRENCE_ID: [np.NAN] * len(dates),
-                            VISIT_CONCEPT_ID: [missing_visit_concept_id] * len(dates),
+                            PERSON_ID: pd.array([person_id] * len(dates), pd.Int64Dtype()),
+                            VISIT_OCCURRENCE_ID: pd.array([np.NAN] * len(dates), pd.Int64Dtype()),
+                            VISIT_CONCEPT_ID: pd.array([missing_visit_concept_id] * len(dates), pd.Int64Dtype()),
                             VISIT_START_DATE: dates,
                             VISIT_END_DATE: dates,
                         }
                     )
-                    event_visit_index[idx] = np.piecewise(
-                        [0] * sum(idx),
-                        [
-                            (cdm_table.loc[idx, start_date_field].values == start_date)
-                            for start_date in zip(missing_visits[VISIT_START_DATE].values)
-                        ],
-                        missing_visit_indices,
-                    )
-                    visits = pd.concat([visits, missing_visits])
-                    visit_indices.extend(missing_visit_indices)
+                    event_visit_index[idx] = [missing_visit_date_to_index.get(x) for x in
+                                              cdm_table.loc[idx, start_date_field]]
+                    visits = pd.concat([visits, missing_visits], ignore_index=True)
+                    visit_date_to_index.update(missing_visit_date_to_index)
                     visit_datas += [
                         VisitData(missing_visits.iloc[i], new_visit=True)
                         for i in range(len(missing_visits))
                     ]
-                    index, count = np.unique(missing_visit_indices, return_counts=True)
-                    for i in range(len(index)):
-                        visit_datas[index[i]].mapped_to_new_visit += count[i]
             else:
                 idx = event_visit_index != -1
                 cdm_table = cdm_table[idx]
                 event_visit_index = event_visit_index[idx]
-
+            index, count = np.unique(event_visit_index, return_counts=True)
+            for i in range(len(index)):
+                if index[i] > last_old_visit_index:
+                    visit_datas[index[i]].mapped_to_new_visit += count[i]
             for visit_index, events in cdm_table.groupby(event_visit_index):
                 visit_datas[visit_index].cdm_tables[table_name] = events
     visit_datas.sort(key=lambda x: x.visit_start_date)
@@ -425,5 +410,5 @@ def map_concepts(cdm_table: pd.DataFrame, concept_id_field: str, mapping: Dict[i
 
     mapped_ids = [do_map(x) for x in cdm_table[concept_id_field]]
     cdm_table[concept_id_field] = mapped_ids
-    cdm_table = cdm_table[cdm_table[concept_id_field] != -1]
+    cdm_table = cdm_table[cdm_table[concept_id_field] != -1].copy().reset_index(drop=True)
     return cdm_table

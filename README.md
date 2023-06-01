@@ -1,5 +1,5 @@
-Assessment of Pre-trained Observational Large Language-models in OHDSI (APOLLO)
-===============================================================================
+Assessment of Pre-trained Observational Large Longitudinal models in OHDSI (APOLLO)
+===================================================================================
 
 ## Introduction
 This Python package is for building and evaluating large general pre-trained models on data in the OMOP Common Data Model (CDM) format. The models are fitted on the structured data (concepts) in the CDM, not any natural language. We aim to evaluate these models on various tasks, such as patient-level prediction (either zero-shot or fine-tuned).

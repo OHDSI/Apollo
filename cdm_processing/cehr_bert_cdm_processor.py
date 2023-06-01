@@ -1,8 +1,6 @@
 import sys
 from typing import Dict, List
 import math
-import datetime as dt
-import cProfile
 import logging
 import configparser
 
@@ -11,6 +9,7 @@ import numpy as np
 
 from cdm_processing.abstract_cdm_processor import AbstractToParquetCdmDataProcessor
 import cdm_processing.cdm_processor_utils as cpu
+import utils.logger as logger
 
 PERSON = "person"
 START_DATE = "start_date"
@@ -19,7 +18,7 @@ DRUG_EXPOSURE = "drug_exposure"
 DRUG_CONCEPT_ID = "drug_concept_id"
 VISIT_START = "VS"
 VISIT_END = "VE"
-EPOCH = dt.date(1970, 1, 1)
+EPOCH = pd.to_datetime(pd.Timestamp(1970, 1, 1))
 
 
 class ProcessingStatistics:
@@ -63,7 +62,8 @@ class ProcessingStatistics:
         logging.debug("Partition %s events mapped to new visits: %s", partition_i, self.mapped_to_new_visit)
         logging.debug("Partition %s existing visits: %s", partition_i, self.existing_visits)
         logging.debug("Partition %s newly created visits: %s", partition_i, self.new_visits)
-        logging.debug("Partition %s removed events having unwanted concept ID: %s", partition_i, self.removed_concept_rows)
+        logging.debug("Partition %s removed events having unwanted concept ID: %s", partition_i,
+                      self.removed_concept_rows)
 
 
 class OutputRow:
@@ -171,7 +171,7 @@ class CehrBertCdmDataProcessor(AbstractToParquetCdmDataProcessor):
         output_row.cohort_member_id = observation_period[cpu.OBSERVATION_PERIOD_ID]
         output_row.person_id = observation_period[cpu.PERSON_ID]
         # Init with random date to silence code warning:
-        previous_visit_end_date = dt.date(2000, 1, 1)
+        previous_visit_end_date = pd.Timestamp(2000, 1, 1)
         visit_rank = 0
         for visit_group in cpu.group_by_visit(
                 cdm_tables=cdm_tables,
@@ -209,7 +209,7 @@ class CehrBertCdmDataProcessor(AbstractToParquetCdmDataProcessor):
         output_row.orders = list(range(0, len(output_row.concept_ids)))
         output_row.num_of_visits = visit_rank
         output_row.num_of_concepts = len(output_row.concept_ids)
-        if (len(output_row.concept_ids) > 0):
+        if len(output_row.concept_ids) > 0:
             self._output.append(output_row.to_pandas())
 
 
@@ -223,18 +223,15 @@ def main(args: List[str]):
         map_drugs_to_ingredients=config["mapping"].getboolean("map_drugs_to_ingredients"),
         concepts_to_remove=[int(x) for x in config["mapping"].get("concepts_to_remove").split(",")],
     )
+    # Log config after initializing cdm_data_processor so logger is initialized:
+    logger.log_config(config)
     if config["debug"].getboolean("profile"):
-        cdm_data_processor._max_cores = -1
-        cProfile.runctx(statement="cdm_data_processor.process_cdm_data()",
-                        locals={"cdm_data_processor": cdm_data_processor},
-                        globals={},
-                        filename="../stats")
-    else:
-        cdm_data_processor.process_cdm_data()
+        cdm_data_processor.set_profile(True)
+    cdm_data_processor.process_cdm_data()
 
 
 if __name__ == "__main__":
-    if (len(sys.argv) != 2):
+    if len(sys.argv) != 2:
         raise Exception("Must provide path to ini file as argument")
     else:
         main(sys.argv[1:])

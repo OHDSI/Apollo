@@ -1,3 +1,5 @@
+# Some code to analyze the sequence format used by cehr-bert
+
 import pandas as pd
 import pyarrow.parquet as pq
 import pyarrow
@@ -7,6 +9,22 @@ import os
 # pfile = pq.read_table(os.path.join(folder, 'part-00000-c0fda67a-757c-41ba-8c31-a69d1f7bf530-c000.snappy.parquet'))
 folder = 'D:/GPM_MDCD/patient_sequence'
 pfile = pq.read_table(os.path.join(folder, 'part0001.parquet'))
+
+parquet_file = pq.ParquetFile(os.path.join(folder, 'part0001.parquet'))
+dataset = pq.ParquetDataset(folder)
+nrows = sum(p.count_rows() for p in dataset.fragments)
+
+import tensorflow as tf
+def generator():
+  dataset = pq.ParquetDataset(folder)
+  for fragment in dataset.fragments:
+    for batch in fragment.to_batches():
+      for row in batch:
+        yield row
+output_types = (tf.int32, tf.string. tf.int32)
+data_set = tf.data.Dataset.from_generator(generator, output_types=output_types)
+
+
 x = pfile.to_pandas()
 print(x.dtypes)
 for column in x.columns:
@@ -46,15 +64,18 @@ for i in range(len(full)):
   max([max(x) for x in full["visit_concept_orders"]])
   min([len(x) for x in full["visit_concept_orders"]])
 
-max_seq_len = 512
-idx = []
+
+total_visits = 0
+shady_visits = 0
 for i in range(len(full)):
+  dates = full["dates"].iat[i]
+  days = (max(dates) - min(dates)) * 7
   vcos = full["visit_concept_orders"].iat[i]
-  seq_length = len(vcos)
-  half_window_size = int(max_seq_len / 2)
-  for cursor in range(seq_length):
-    start_index = max(0, cursor - half_window_size)
-    end_index = min(cursor + half_window_size, seq_length)
-    sub_sequence = vcos[start_index:end_index]
-    if max(sub_sequence) - min(sub_sequence) > 512:
-      print(i)
+  visits = max(vcos)
+  total_visits += visits
+  if visits > days / 2:
+    shady_visits += visits
+
+print(f"Total visits: {total_visits}")
+print(f"Shady visits: {shady_visits}")
+print(f"Shady visits: {shady_visits / total_visits}")
