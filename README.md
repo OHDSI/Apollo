@@ -1,6 +1,8 @@
 Assessment of Pre-trained Observational Large Longitudinal models in OHDSI (APOLLO)
 ===================================================================================
 
+[![Build Status](https://github.com/OHDSI/Apollo/workflows/Build-and-test/badge.svg)](https://github.com/OHDSI/Apollo/actions?query=workflow%3ABuild-and-test)
+
 ## Introduction
 This Python package is for building and evaluating large general pre-trained models on data in the OMOP Common Data Model (CDM) format. The models are fitted on the structured data (concepts) in the CDM, not any natural language. We aim to evaluate these models on various tasks, such as patient-level prediction (either zero-shot or fine-tuned).
 
