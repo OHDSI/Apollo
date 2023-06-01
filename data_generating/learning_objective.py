@@ -8,7 +8,7 @@ import pandas as pd
 import tensorflow as tf
 
 from data_generating import tokenizer
-from data_generating.parquet_data_iterator import ParquetDataIterator
+from data_generating.abstract_data_generator import AbstractDataGenerator
 
 
 class LayerInputNames:
@@ -27,6 +27,7 @@ class LayerInputNames:
     AGES = "ages"
     VISIT_CONCEPT_ORDERS = "visit_concept_orders"
     CONCEPT_PREDICTIONS = "concept_predictions"
+
 
 def _pad_sequence(sequence: np.ndarray[any], padding_value: any, max_sequence_length: int) -> np.ndarray[any]:
     """
@@ -52,14 +53,12 @@ class LearningObjective(ABC):
     """
 
     @abstractmethod
-    def initialize(self, parquet_data_iterator: ParquetDataIterator, max_sequence_length: int, is_training: bool):
+    def initialize(self, data_generator: AbstractDataGenerator):
         """
         An initializer called by the DataGenerator. Other, objective-specific initialization, can be done in __init__.
 
         Args
-            parquet_data_iterator: The parquet data iterator that can be used if needed.
-            max_sequence_length: The maximum sequence length.
-            is_training: If true, the data is intended for training, and for example subsequences will be sampled.
+            data_generator: The calling data generator.
         """
         pass
 
@@ -90,7 +89,7 @@ class LearningObjective(ABC):
 
 
 class BertFineTuningLearningObjective(LearningObjective):
-    def initialize(self, parquet_data_iterator: ParquetDataIterator, max_sequence_length: int, is_training: bool):
+    def initialize(self, data_generator: AbstractDataGenerator):
         pass
 
     def get_tf_dataset_schema(self) -> tuple[Dict, Dict]:
@@ -116,15 +115,16 @@ class VisitPredictionLearningObjective(LearningObjective):
         self._reuse_tokenizer = reuse_tokenizer
         self._max_sequence_length = None
 
-    def initialize(self, parquet_data_iterator: ParquetDataIterator, max_sequence_length: int, is_training: bool):
+    def initialize(self, data_generator: AbstractDataGenerator):
         json_file = os.path.join(self._work_folder, "_visit_tokenizer.json")
         if self._reuse_tokenizer and os.path.exists(json_file):
             self._visit_tokenizer = tokenizer.load_from_json(json_file)
         else:
             self._visit_tokenizer = tokenizer.ConceptTokenizer()
-            self._visit_tokenizer.fit_on_concept_sequences(parquet_data_iterator, "visit_concept_ids")
+            self._visit_tokenizer.fit_on_concept_sequences(data_generator.get_parquet_data_iterator(),
+                                                           "visit_concept_ids")
             self._visit_tokenizer.save_to_json(json_file)
-        self._max_sequence_length = max_sequence_length
+        self._max_sequence_length = data_generator.get_max_sequence_length()
 
     def get_tf_dataset_schema(self):
         input_dict_schema = {
@@ -178,20 +178,20 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
         self._max_sequence_length = None
         self._is_training = None
 
-    def initialize(self, parquet_data_iterator: ParquetDataIterator, max_sequence_length: int, is_training: bool):
+    def initialize(self, data_generator: AbstractDataGenerator):
         json_file = os.path.join(self._work_folder, "_concept_tokenizer.json")
         if self._reuse_tokenizer and os.path.exists(json_file):
             self._concept_tokenizer = tokenizer.load_from_json(json_file)
         else:
             self._concept_tokenizer = tokenizer.ConceptTokenizer()
-            self._concept_tokenizer.fit_on_concept_sequences(parquet_data_iterator, "concept_ids")
+            self._concept_tokenizer.fit_on_concept_sequences(data_generator.get_parquet_data_iterator(), "concept_ids")
             self._concept_tokenizer.save_to_json(json_file)
-        self._max_sequence_length = max_sequence_length
-        self._is_training = is_training
+        self._max_sequence_length = data_generator.get_max_sequence_length()
+        self._is_training = data_generator.get_is_training()
 
     def get_tf_dataset_schema(self):
         input_dict_schema = {
-            LayerInputNames.MASKED_VISIT_CONCEPTS: tf.int32,
+            LayerInputNames.MASKED_CONCEPT_IDS: tf.int32,
             LayerInputNames.CONCEPT_IDS: tf.int32,
             LayerInputNames.MASK: tf.int32,
             LayerInputNames.TIME_STAMPS: tf.int32,

@@ -5,6 +5,7 @@ from typing import Iterator, Dict
 import numpy as np
 import pandas as pd
 
+from data_generating.abstract_data_generator import AbstractDataGenerator
 from data_generating.learning_objective import LearningObjective
 from data_generating.parquet_data_iterator import ParquetDataIterator
 
@@ -12,7 +13,7 @@ from data_generating.parquet_data_iterator import ParquetDataIterator
 SEQUENCE_LENGTH_COLUMN_NAME = "num_of_concepts"
 
 
-class DataGenerator:
+class DataGenerator(AbstractDataGenerator):
     """
     Generate data for tensorflow from parquet files. Iterates over the sequence data created using the CDM
     processing. To be used with tf.data.Dataset.from_generator
@@ -47,13 +48,20 @@ class DataGenerator:
         self._nrows = len(self._parquet_data_iterator)
         self._learning_objectives = learning_objectives
         for learning_objective in self._learning_objectives:
-            learning_objective.initialize(parquet_data_iterator=self._parquet_data_iterator,
-                                          max_sequence_length=self._max_sequence_length,
-                                          is_training=self._is_training)
+            learning_objective.initialize(self)
 
     def __len__(self) -> int:
         """The number of batches per epoch"""
         return int(np.ceil(self._nrows / self._batch_size))
+
+    def get_parquet_data_iterator(self) -> ParquetDataIterator:
+        return self._parquet_data_iterator
+
+    def get_is_training(self) -> bool:
+        return self._is_training
+
+    def get_max_sequence_length(self) -> int:
+        return self._max_sequence_length
 
     def generator(self) -> Iterator[tuple[Dict, Dict]]:
         """Generate data for tensorflow"""
