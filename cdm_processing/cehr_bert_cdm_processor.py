@@ -148,8 +148,6 @@ class CehrBertCdmDataProcessor(AbstractToParquetCdmDataProcessor):
         super()._finish_partition(partition_i=partition_i)
 
     def _process_person(self, person_id: int, cdm_tables: Dict[str, pd.DataFrame]):
-        if len(self._output) > 1000:
-            return
         self._processing_statistics.record_person()
         cdm_tables, removed_row_counts = cpu.remove_concepts(cdm_tables=cdm_tables,
                                                              concept_ids=self._concepts_to_remove)
