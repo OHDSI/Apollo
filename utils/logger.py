@@ -1,5 +1,5 @@
 import logging
-
+import sys
 
 def _add_stream_handler(logger: logging.Logger):
     stream_handler = logging.StreamHandler()
@@ -32,6 +32,8 @@ def create_logger(log_file_name: str):
         _add_file_handler(logger=logger, log_file_name=log_file_name)
         _add_stream_handler(logger=logger)
 
+    sys.excepthook = handle_exception
+
 class _ConfigLogger(object):
 
     def log_config(self, config):
@@ -44,3 +46,10 @@ class _ConfigLogger(object):
 def log_config(config):
     config_logger = _ConfigLogger()
     config_logger.log_config(config)
+
+
+def handle_exception(exc_type, exc_value, exc_traceback):
+    if not issubclass(exc_type, KeyboardInterrupt):
+        logger = logging.getLogger()
+        logger.critical("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
+    sys.__excepthook__(exc_type, exc_value, exc_traceback)
