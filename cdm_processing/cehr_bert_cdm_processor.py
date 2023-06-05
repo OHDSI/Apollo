@@ -35,6 +35,7 @@ class ProcessingStatistics:
         self.removed_concept_rows = 0
         self.persons = 0
         self.observation_periods = 0
+        self.removed_duplicate_events = 0
 
     def record_visit_mapping_stats(self, visit_data: cpu.VisitData):
         self.mapped_by_id += visit_data.mapped_by_id
@@ -47,6 +48,9 @@ class ProcessingStatistics:
 
     def record_removed_concept_rows(self, row_count: int):
         self.removed_concept_rows += row_count
+
+    def record_removed_duplicate_events(self, row_count: int):
+        self.removed_duplicate_events += row_count
 
     def record_person(self):
         self.persons += 1
@@ -64,6 +68,7 @@ class ProcessingStatistics:
         logging.debug("Partition %s newly created visits: %s", partition_i, self.new_visits)
         logging.debug("Partition %s removed events having unwanted concept ID: %s", partition_i,
                       self.removed_concept_rows)
+        logging.debug("Partition %s removed duplicate events: %s", partition_i, self.removed_duplicate_events)
 
 
 class OutputRow:
@@ -189,6 +194,7 @@ class CehrBertCdmDataProcessor(AbstractToParquetCdmDataProcessor):
                 output_row.visit_concept_ids.append("0")
             visit_end_date = visit_group.visit["visit_end_date"]
             event_table = cpu.union_domain_tables(visit_group.cdm_tables)
+            removed_duplicated_rows, event_table = cpu.remove_duplicate_events(event_table)
             visit_token_len = len(event_table) + 2
             output_row.concept_ids.append(VISIT_START)
             output_row.concept_ids.extend(event_table[CONCEPT_ID].astype(int).astype(str).to_list())

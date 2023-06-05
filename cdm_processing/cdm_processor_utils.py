@@ -412,3 +412,28 @@ def map_concepts(cdm_table: pd.DataFrame, concept_id_field: str, mapping: Dict[i
     cdm_table[concept_id_field] = mapped_ids
     cdm_table = cdm_table[cdm_table[concept_id_field] != -1].copy().reset_index(drop=True)
     return cdm_table
+
+def remove_duplicate_events(event_table: pd.DataFrame) -> (int, pd.DataFrame):
+    """
+    Drop duplicate events from an event table. Events are considered duplicates if they have the same concept ID and
+    start date.
+    Args:
+        event_table: An event table as produced by the union_domain_tables function.
+
+    Returns:
+        A tuple with the count of rows removed and the event table with duplicate events removed.
+    """
+    count = len(event_table)
+    event_table.drop_duplicates(inplace=True, ignore_index=True)
+    return count - len(event_table), event_table
+
+    # Slower than pandas drop_duplicates:
+    # if len(event_table) <= 1:
+    #     return 0, event_table
+    # else:
+    #     idx = event_table.eq(event_table.shift()).apply(all, axis=1)
+    #     if all(~idx):
+    #         return 0, event_table
+    #     else:
+    #         return sum(idx), event_table[~idx].reset_index()
+

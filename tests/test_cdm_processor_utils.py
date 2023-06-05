@@ -180,6 +180,22 @@ class TestCdmProcessorUtils(unittest.TestCase):
         visit_group = visit_groups[2]
         assert "condition_occurrence" not in visit_group.cdm_tables
 
+    def test_remove_duplicate_events(self):
+        event_table = pd.DataFrame(
+            {
+                "concept_id": [1000, 2000, 2000, 2000],
+                "start_date": ["2000-01-01", "2001-01-01", "2001-01-01", "2001-01-02"],
+            }
+        )
+        event_table["start_date"] = pd.to_datetime(
+            event_table["start_date"]
+        )
+        removed_count, event_table = cpu.remove_duplicate_events(event_table)
+        assert removed_count == 1
+        assert len(event_table) == 3
+        assert all(event_table["concept_id"] == [1000, 2000, 2000])
+        assert all(event_table["start_date"] == pd.to_datetime(["2000-01-01", "2001-01-01", "2001-01-02"]))
+
 
 if __name__ == '__main__':
     unittest.main()
