@@ -72,11 +72,11 @@ def get_cdm_tables(cdm_folder: str, partition_i: int) -> Dict[str, pa.Table]:
     return {table: pq.read_table(os.path.join(cdm_folder, table, file_name)) for table in CDM_TABLES}
 
 
-def compute_date_of_birth(person: pa.Table) -> pa.Array:
+def add_date_of_birth(person: pa.Table) -> pa.Table:
     """
-    Compute the date of birth from a person table
+    Compute the date of birth from a person table, and add it as a column called 'date_of_birth'.
     """
-    return pc.strptime(
+    dob = pc.strptime(
         pc.binary_join_element_wise(
             pc.cast(person['year_of_birth'], pa.string()),
             pc.cast(pc.coalesce(person['month_of_birth'], 1), pa.string()),
@@ -86,6 +86,7 @@ def compute_date_of_birth(person: pa.Table) -> pa.Array:
         format="%Y-%m-%d",
         unit="s"
     )
+    return person.append_column("date_of_birth", dob)
 
 
 def union_domain_tables(cdm_tables: Dict[str, pa.Table]) -> pa.Table:
@@ -238,14 +239,15 @@ def link_events_to_visits(combined_table: pa.Table,
     con.execute(sql)
     sql = "SELECT person_id, " \
           "  concept_id, " \
+          "  start_date, " \
           "  COALESCE(id_from_id, id_from_date, id_from_new_visit) AS internal_visit_id " \
           "FROM joined_3"
     combined_table = con.execute(sql).arrow()
     sql = "SELECT person_id, " \
           "  visit_start_date, " \
           "  visit_end_date, " \
-          "  visit_concept_id " \
-          "  internal_visit_id, " \
+          "  visit_concept_id, " \
+          "  internal_visit_id " \
           "FROM visit_occurrence " \
           "" \
           "UNION ALL " \
@@ -253,8 +255,8 @@ def link_events_to_visits(combined_table: pa.Table,
           "SELECT person_id, " \
           "  visit_start_date, " \
           "  visit_end_date, " \
-          "  visit_concept_id " \
-          "  internal_visit_id, " \
+          "  visit_concept_id, " \
+          "  internal_visit_id " \
           "FROM missing_visits"
     visit_occurrence = con.execute(sql).arrow()
 
