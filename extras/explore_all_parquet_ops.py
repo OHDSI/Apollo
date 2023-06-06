@@ -1,4 +1,4 @@
-import cdm_processing.cdm_arrow_processor_utils as cdm_utils
+import cdm_processing.cdm_processor_utils as cdm_utils
 
 cdm_folder = "D:/GPM_CCAE"
 cdm_tables = cdm_utils.get_cdm_tables(cdm_folder, 1)

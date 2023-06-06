@@ -7,7 +7,7 @@ import os
 
 # folder = 'D:/omopSynthea/cehr-bert/patient_sequence'
 # pfile = pq.read_table(os.path.join(folder, 'part-00000-c0fda67a-757c-41ba-8c31-a69d1f7bf530-c000.snappy.parquet'))
-folder = 'D:/GPM_MDCD/patient_sequence'
+folder = 'D:/GPM_CCAE/patient_sequence'
 pfile = pq.read_table(os.path.join(folder, 'part0001.parquet'))
 
 parquet_file = pq.ParquetFile(os.path.join(folder, 'part0001.parquet'))
@@ -79,3 +79,6 @@ for i in range(len(full)):
 print(f"Total visits: {total_visits}")
 print(f"Shady visits: {shady_visits}")
 print(f"Shady visits: {shady_visits / total_visits}")
+
+
+
