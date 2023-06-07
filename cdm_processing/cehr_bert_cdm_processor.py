@@ -26,6 +26,7 @@ def _create_cehr_bert_tables(cdm_tables: Dict[str, pa.Table], event_table: pa.Ta
         A table with the data needed for the CEHR-BERT model.
     """
     con = duckdb.connect(database=':memory:', read_only=False)
+    con.execute("SET enable_progress_bar = false")
     con.register("visit_occurrence", cdm_tables["visit_occurrence"])
     con.register("observation_period_table", cdm_tables["observation_period"])
     con.register("person", cdm_tables["person"])

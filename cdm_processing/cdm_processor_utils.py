@@ -142,6 +142,7 @@ def remove_duplicates(event_table: pa.Table) -> tuple[pa.Table, int]:
     """
     count_before = len(event_table)
     con = duckdb.connect(database=':memory:', read_only=False)
+    con.execute("SET enable_progress_bar = false")
     con.register("event_table", event_table)
     sql = "SELECT DISTINCT * FROM event_table"
     result = con.execute(sql).arrow()
@@ -170,6 +171,7 @@ def link_events_to_visits(event_table: pa.Table,
     visit_occurrence = visit_occurrence.append_column("internal_visit_id",
                                                       pa.array(range(len(visit_occurrence)), pa.int64()))
     con = duckdb.connect(database=':memory:', read_only=False)
+    con.execute("SET enable_progress_bar = false")
     con.register("event_table", event_table)
     con.register("visit_occurrence", visit_occurrence)
     # Join by visit_occurrence_id:
