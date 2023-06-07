@@ -2,28 +2,15 @@
 
 import pandas as pd
 import pyarrow.parquet as pq
-import pyarrow
 import os
 
-# folder = 'D:/omopSynthea/cehr-bert/patient_sequence'
-# pfile = pq.read_table(os.path.join(folder, 'part-00000-c0fda67a-757c-41ba-8c31-a69d1f7bf530-c000.snappy.parquet'))
-folder = 'D:/GPM_MDCD/patient_sequence'
-pfile = pq.read_table(os.path.join(folder, 'part0001.parquet'))
-
-parquet_file = pq.ParquetFile(os.path.join(folder, 'part0001.parquet'))
-dataset = pq.ParquetDataset(folder)
-nrows = sum(p.count_rows() for p in dataset.fragments)
-
-import tensorflow as tf
-def generator():
-  dataset = pq.ParquetDataset(folder)
-  for fragment in dataset.fragments:
-    for batch in fragment.to_batches():
-      for row in batch:
-        yield row
-output_types = (tf.int32, tf.string. tf.int32)
-data_set = tf.data.Dataset.from_generator(generator, output_types=output_types)
-
+# folder = "D:/omopSynthea/cehr-bert/patient_sequence"
+# file = pq.read_table(os.path.join(folder, "part-00000-c0fda67a-757c-41ba-8c31-a69d1f7bf530-c000.snappy.parquet"))
+folder = "D:/GPM_CCAE/patient_sequence"
+file = "part0001.parquet"
+folder = "D:/GPM_CCAE/patient_sequence_2"
+file = "part0001.parquet"
+pfile = pq.read_table(os.path.join(folder, file))
 
 x = pfile.to_pandas()
 print(x.dtypes)
@@ -32,7 +19,7 @@ for column in x.columns:
   print(x[column].iat[0])
   print(x[column].iat[0].dtype)
 
-v= x["concept_ids"].iat[0]
+len(x)
 
 
 full = pd.read_parquet(folder)
@@ -79,3 +66,6 @@ for i in range(len(full)):
 print(f"Total visits: {total_visits}")
 print(f"Shady visits: {shady_visits}")
 print(f"Shady visits: {shady_visits / total_visits}")
+
+
+

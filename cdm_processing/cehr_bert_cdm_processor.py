@@ -1,214 +1,204 @@
+import os
 import sys
 from typing import Dict, List
-import math
 import logging
 import configparser
 
-import pandas as pd
-import numpy as np
+import duckdb
+import pyarrow as pa
+import pyarrow.parquet as pq
 
-from cdm_processing.abstract_cdm_processor import AbstractToParquetCdmDataProcessor
-import cdm_processing.cdm_processor_utils as cpu
+from cdm_processing.abstract_cdm_processor import AbstractCdmDataProcessor
+import cdm_processing.cdm_processor_utils as cdm_utils
 import utils.logger as logger
 
-PERSON = "person"
-START_DATE = "start_date"
-CONCEPT_ID = "concept_id"
-DRUG_EXPOSURE = "drug_exposure"
-DRUG_CONCEPT_ID = "drug_concept_id"
-VISIT_START = "VS"
-VISIT_END = "VE"
-EPOCH = pd.to_datetime(pd.Timestamp(1970, 1, 1))
 
-
-class ProcessingStatistics:
+def _create_cehr_bert_tables(cdm_tables: Dict[str, pa.Table], event_table: pa.Table) -> pa.Table:
     """
-    A class for storing and reporting out some statistics about the CDM processing.
+    Creates the table needed for the CEHR-BERT model.
+    Args:
+        cdm_tables: A dictionary of CDM tables, with the table name as key and the table as value. The person table
+            should have the date_of_birth field added using the add_date_of_birth_to_person_table() function.
+        event_table: The table with the clinical events. This is a combination across the CDM domain tables, as created
+            by the union_cdm_tables() function.
+
+    Returns:
+        A table with the data needed for the CEHR-BERT model.
     """
+    con = duckdb.connect(database=':memory:', read_only=False)
+    con.execute("SET enable_progress_bar = false")
+    con.register("visit_occurrence", cdm_tables["visit_occurrence"])
+    con.register("observation_period_table", cdm_tables["observation_period"])
+    con.register("person", cdm_tables["person"])
+    con.register("event_table", event_table)
+    sql = "CREATE TABLE visits AS " \
+          "SELECT visit_occurrence.*, " \
+          "  observation_period_id, " \
+          "  ROW_NUMBER() OVER (PARTITION BY observation_period_id ORDER BY visit_start_date) AS visit_rank " \
+          "FROM visit_occurrence " \
+          "INNER JOIN observation_period_table " \
+          "  ON visit_occurrence.person_id = observation_period_table.person_id " \
+          "    AND visit_occurrence.visit_start_date >= observation_period_table.observation_period_start_date " \
+          "    AND visit_occurrence.visit_start_date <= observation_period_table.observation_period_end_date"
+    con.execute(sql)
+    sql = "CREATE TABLE interval_tokens AS " \
+          "SELECT CASE " \
+          "    WHEN days < 0 THEN 'W-1' " \
+          "    WHEN days < 28 THEN 'W' || CAST(CAST(FLOOR(days / 7) AS INT) AS VARCHAR) " \
+          "    WHEN days < 360 THEN 'M' || CAST(CAST(FLOOR(days / 30) AS INT) AS VARCHAR) " \
+          "    ELSE 'LT' " \
+          "  END AS concept_ids, " \
+          "  0 AS visit_segments, " \
+          "  0 AS dates, " \
+          " -1 AS ages, " \
+          "  visit_rank AS visit_concept_orders, " \
+          "  CAST('0' AS VARCHAR) AS visit_concept_ids, " \
+          "  -2 AS sort_order, " \
+          "  observation_period_id, " \
+          "  person_id " \
+          "FROM (" \
+          "  SELECT visits.visit_start_date - previous_visit.visit_end_date AS days," \
+          "    visits.* " \
+          "  FROM visits " \
+          "  INNER JOIN visits previous_visit" \
+          "    ON visits.observation_period_id = previous_visit.observation_period_id " \
+          "      AND visits.visit_rank = previous_visit.visit_rank + 1" \
+          ") intervals"
+    con.execute(sql)
+    sql = "CREATE TABLE start_tokens AS " \
+          "SELECT 'VS' AS concept_ids, " \
+          "  visit_rank % 2 + 1 AS visit_segments, " \
+          "  DATE_DIFF('week', DATE '1970-01-01', visit_start_date) AS dates, " \
+          "  DATE_DIFF('month', date_of_birth, visit_start_date) AS ages, " \
+          "  visit_rank AS visit_concept_orders, " \
+          "  CAST(visit_concept_id AS VARCHAR) AS visit_concept_ids, " \
+          "  -1 AS sort_order, " \
+          "  observation_period_id, " \
+          "  person.person_id " \
+          "FROM visits " \
+          "INNER JOIN person " \
+          "  ON visits.person_id = person.person_id"
+    con.execute(sql)
+    sql = "CREATE TABLE event_tokens AS " \
+          "SELECT CAST(concept_id AS VARCHAR) AS concept_ids, " \
+          "  visit_rank % 2 + 1 AS visit_segments, " \
+          "  DATE_DIFF('week', DATE '1970-01-01', start_date) AS dates, " \
+          "  DATE_DIFF('month', date_of_birth,start_date) AS ages, " \
+          "  visit_rank AS visit_concept_orders, " \
+          "  CAST(visit_concept_id AS VARCHAR) AS visit_concept_ids, " \
+          "  concept_id AS sort_order, " \
+          "  observation_period_id, " \
+          "  person.person_id " \
+          "FROM event_table " \
+          "INNER JOIN visits " \
+          "  ON event_table.internal_visit_id = visits.internal_visit_id " \
+          "INNER JOIN person " \
+          "  ON visits.person_id = person.person_id"
+    con.execute(sql)
+    sql = "CREATE TABLE end_tokens AS " \
+          "SELECT 'VE' AS concept_ids, " \
+          "  visit_rank % 2 + 1 AS visit_segments, " \
+          "  DATE_DIFF('week', DATE '1970-01-01', visit_end_date) AS dates, " \
+          "  DATE_DIFF('month', date_of_birth, visit_end_date) AS ages, " \
+          "  visit_rank AS visit_concept_orders, " \
+          "  CAST(visit_concept_id AS VARCHAR) AS visit_concept_ids, " \
+          "  9223372036854775807 AS sort_order, " \
+          "  observation_period_id, " \
+          "  person.person_id " \
+          "FROM visits " \
+          "INNER JOIN person " \
+          "  ON visits.person_id = person.person_id"
+    con.execute(sql)
+    sql = "SELECT *, " \
+          "  ROW_NUMBER() OVER " \
+          "    (PARTITION BY observation_period_id ORDER BY visit_concept_orders, sort_order) - 1  AS orders " \
+          "FROM (" \
+          "  SELECT * FROM interval_tokens " \
+          "  UNION ALL " \
+          "  SELECT * FROM start_tokens " \
+          "  UNION ALL " \
+          "  SELECT * FROM event_tokens " \
+          "  UNION ALL " \
+          "  SELECT * FROM end_tokens" \
+          ") tokens " \
+          "ORDER BY observation_period_id, visit_concept_orders, sort_order"
+    union_tokens = con.execute(sql).arrow()
+    con.execute("DROP TABLE visits")
+    con.execute("DROP TABLE interval_tokens")
+    con.execute("DROP TABLE start_tokens")
+    con.execute("DROP TABLE event_tokens")
+    con.execute("DROP TABLE end_tokens")
+    duckdb.close(con)
+    cehr_bert_input = union_tokens.group_by("observation_period_id").aggregate([
+        ("person_id", "max"),
+        ("concept_ids", "list"),
+        ("visit_segments", "list"),
+        ("dates", "list"),
+        ("ages", "list"),
+        ("visit_concept_orders", "list"),
+        ("visit_concept_ids", "list"),
+        ("orders", "list"),
+        ("concept_ids", "count"),
+        ("visit_concept_orders", "max")]).rename_columns(
+        ["observation_period_id",
+         "person_id",
+         "concept_ids",
+         "visit_segments",
+         "dates",
+         "ages",
+         "visit_concept_orders",
+         "visit_concept_ids",
+         "orders",
+         "num_of_concepts",
+         "num_of_visits"])
+    return cehr_bert_input
 
-    def __init__(self):
-        self.mapped_by_id = 0
-        self.mapped_by_date = 0
-        self.mapped_to_new_visit = 0
-        self.existing_visits = 0
-        self.new_visits = 0
-        self.removed_concept_rows = 0
-        self.persons = 0
-        self.observation_periods = 0
 
-    def record_visit_mapping_stats(self, visit_data: cpu.VisitData):
-        self.mapped_by_id += visit_data.mapped_by_id
-        self.mapped_by_date += visit_data.mapped_by_date
-        self.mapped_to_new_visit += visit_data.mapped_to_new_visit
-        if visit_data.new_visit:
-            self.new_visits += 1
-        else:
-            self.existing_visits += 1
-
-    def record_removed_concept_rows(self, row_count: int):
-        self.removed_concept_rows += row_count
-
-    def record_person(self):
-        self.persons += 1
-
-    def record_observation_period(self):
-        self.observation_periods += 1
-
-    def log_statistics(self, partition_i: int):
-        logging.debug("Partition %s persons: %s", partition_i, self.persons)
-        logging.debug("Partition %s observation periods: %s", partition_i, self.observation_periods)
-        logging.debug("Partition %s events mapped to visit by ID: %s", partition_i, self.mapped_by_id)
-        logging.debug("Partition %s events mapped to visit by date: %s", partition_i, self.mapped_by_date)
-        logging.debug("Partition %s events mapped to new visits: %s", partition_i, self.mapped_to_new_visit)
-        logging.debug("Partition %s existing visits: %s", partition_i, self.existing_visits)
-        logging.debug("Partition %s newly created visits: %s", partition_i, self.new_visits)
-        logging.debug("Partition %s removed events having unwanted concept ID: %s", partition_i,
-                      self.removed_concept_rows)
-
-
-class OutputRow:
-    """
-    A class representing the input format expected for the CEHR-BERT trainer.
-    """
-
-    def __init__(self):
-        self.cohort_member_id = 0
-        self.person_id = 0
-        self.concept_ids = []
-        self.visit_segments = []
-        self.dates = []
-        self.ages = []
-        self.visit_concept_orders = []
-        self.visit_concept_ids = []
-        self.orders = []
-        self.num_of_visits = 0
-        self.num_of_concepts = 0
-
-    def to_pandas(self) -> pd.DataFrame:
-        output_row = pd.DataFrame(
-            {
-                "cohort_member_id": [self.cohort_member_id],
-                "person_id": [self.person_id],
-                "concept_ids": [np.array(self.concept_ids, dtype=str)],
-                "visit_segments": [np.array(self.visit_segments, dtype=np.int32)],
-                "orders": [np.array(self.orders, dtype=np.int32)],
-                "dates": [np.array(self.dates, dtype=np.int32)],
-                "ages": [np.array(self.ages, dtype=np.int32)],
-                "visit_concept_orders": [np.array(self.visit_concept_orders, dtype=np.int32)],
-                "num_of_visits": [self.num_of_visits],
-                "num_of_concepts": [self.num_of_concepts],
-                "visit_concept_ids": [np.array(self.visit_concept_ids, dtype=str)],
-            }
-        )
-        return output_row
-
-
-def _create_interval_token(days: int) -> str:
-    if days < 0:
-        return "W-1"
-    if days < 28:
-        return f"W{str(math.floor(days / 7))}"
-    if days < 360:
-        return f"M{str(math.floor(days / 30))}"
-    return "LT"
-
-
-def _days_to_weeks(days: int) -> int:
-    return math.floor(max(days, 0) / 7)
-
-
-def _days_to_months(days: int) -> int:
-    return math.floor(days / 30.5)
-
-
-class CehrBertCdmDataProcessor(AbstractToParquetCdmDataProcessor):
+class CehrBertCdmDataProcessor(AbstractCdmDataProcessor):
     """
     A re-implementation of the processor for CEHR-BERT (https://github.com/cumc-dbmi/cehr-bert)
     """
 
     def __init__(self, cdm_data_path: str, output_path: str, max_cores: int = -1,
                  map_drugs_to_ingredients: bool = False, concepts_to_remove: List[int] = [0]):
-        super(AbstractToParquetCdmDataProcessor, self).__init__(
+        super().__init__(
             cdm_data_path=cdm_data_path, output_path=output_path, max_cores=max_cores
         )
         self._map_drugs_to_ingredients = map_drugs_to_ingredients
         self._concepts_to_remove = concepts_to_remove
-
-    def _prepare(self):
-        super()._prepare()
         if self._map_drugs_to_ingredients:
-            self._drug_mapping = cpu.load_mapping_to_ingredients(self._cdm_data_path)
+            self._drug_mapping = cdm_utils.load_mapping_to_ingredients(self._cdm_data_path)
 
-    def _prepare_partition(self, partition_i: int):
-        super()._prepare_partition(partition_i=partition_i)
-        self._processing_statistics = ProcessingStatistics()
+    def _process_parition_cdm_data(self, cdm_tables: Dict[str, pa.Table], partition_i: int):
+        """
+        Process a single partition of CDM data, and save the result to disk.
+        """
+        cdm_tables["person"] = cdm_utils.add_date_of_birth(cdm_tables["person"])
+        cdm_tables["drug_exposure"] = cdm_utils.map_concepts(cdm_table=cdm_tables["drug_exposure"],
+                                                             concept_id_field="drug_concept_id",
+                                                             mapping=self._drug_mapping)
+        event_table = cdm_utils.union_domain_tables(cdm_tables)
+        event_table, removed_concepts = cdm_utils.remove_concepts(event_table=event_table,
+                                                                  concept_ids=[0, 900000010])
+        event_table, removed_duplicates = cdm_utils.remove_duplicates(event_table=event_table)
+        event_table, visit_occurrence, mapping_stats = cdm_utils.link_events_to_visits(event_table=event_table,
+                                                                                       visit_occurrence=cdm_tables[
+                                                                                           "visit_occurrence"],
+                                                                                       mising_visit_concept_id=1)
+        cdm_tables["visit_occurrence"] = visit_occurrence
+        cehr_bert_input = _create_cehr_bert_tables(cdm_tables=cdm_tables, event_table=event_table)
+        file_name = "part{:04d}.parquet".format(partition_i + 1)
+        pq.write_table(cehr_bert_input, os.path.join(self._output_path, file_name))
 
-    def _finish_partition(self, partition_i: int):
-        self._processing_statistics.log_statistics(partition_i=partition_i)
-        super()._finish_partition(partition_i=partition_i)
-
-    def _process_person(self, person_id: int, cdm_tables: Dict[str, pd.DataFrame]):
-        self._processing_statistics.record_person()
-        cdm_tables, removed_row_counts = cpu.remove_concepts(cdm_tables=cdm_tables,
-                                                             concept_ids=self._concepts_to_remove)
-        self._processing_statistics.record_removed_concept_rows(sum(removed_row_counts.values()))
-        cpu.call_per_observation_period(
-            cdm_tables=cdm_tables, function=self._process_observation_period
-        )
-
-    def _process_observation_period(
-            self, observation_period: pd.Series, cdm_tables: Dict[str, pd.DataFrame]
-    ):
-        self._processing_statistics.record_observation_period()
-        if self._map_drugs_to_ingredients and DRUG_EXPOSURE in cdm_tables:
-            cdm_tables[DRUG_EXPOSURE] = cpu.map_concepts(cdm_table=cdm_tables[DRUG_EXPOSURE],
-                                                         concept_id_field=DRUG_CONCEPT_ID,
-                                                         mapping=self._drug_mapping)
-        date_of_birth = cpu.get_date_of_birth(person=cdm_tables[PERSON].iloc[0])
-        output_row = OutputRow()
-        output_row.cohort_member_id = observation_period[cpu.OBSERVATION_PERIOD_ID]
-        output_row.person_id = observation_period[cpu.PERSON_ID]
-        # Init with random date to silence code warning:
-        previous_visit_end_date = pd.Timestamp(2000, 1, 1)
-        visit_rank = 0
-        for visit_group in cpu.group_by_visit(
-                cdm_tables=cdm_tables,
-                link_by_date=True,
-                create_missing_visits=True,
-                missing_visit_concept_id=0,
-        ):
-            visit_rank += 1
-            if visit_rank > 1:
-                # Add interval token:
-                interval_token = _create_interval_token((visit_group.visit_start_date - previous_visit_end_date).days)
-                output_row.concept_ids.append(interval_token)
-                output_row.visit_segments.append(0)
-                output_row.dates.append(0)
-                output_row.ages.append(-1)
-                output_row.visit_concept_orders.append(visit_rank)
-                output_row.visit_concept_ids.append("0")
-            visit_end_date = visit_group.visit["visit_end_date"]
-            event_table = cpu.union_domain_tables(visit_group.cdm_tables)
-            visit_token_len = len(event_table) + 2
-            output_row.concept_ids.append(VISIT_START)
-            output_row.concept_ids.extend(event_table[CONCEPT_ID].astype(int).astype(str).to_list())
-            output_row.concept_ids.append(VISIT_END)
-            output_row.visit_segments.extend([visit_rank % 2 + 1] * visit_token_len)
-            output_row.dates.append(_days_to_weeks((visit_group.visit_start_date - EPOCH).days))
-            output_row.dates.extend(event_table[START_DATE].apply(lambda x: _days_to_weeks((x - EPOCH).days)))
-            output_row.dates.append(_days_to_weeks((visit_end_date - EPOCH).days))
-            output_row.ages.append(_days_to_months((visit_group.visit_start_date - date_of_birth).days))
-            output_row.ages.extend(event_table[START_DATE].apply(lambda x: _days_to_months((x - date_of_birth).days)))
-            output_row.ages.append(_days_to_months((visit_end_date - date_of_birth).days))
-            output_row.visit_concept_orders.extend([visit_rank] * visit_token_len)
-            output_row.visit_concept_ids.extend([str(int(visit_group.visit[cpu.VISIT_CONCEPT_ID]))] * visit_token_len)
-            previous_visit_end_date = visit_end_date
-            self._processing_statistics.record_visit_mapping_stats(visit_group)
-        output_row.orders = list(range(0, len(output_row.concept_ids)))
-        output_row.num_of_visits = visit_rank
-        output_row.num_of_concepts = len(output_row.concept_ids)
-        if len(output_row.concept_ids) > 0:
-            self._output.append(output_row.to_pandas())
+        logging.debug("Partition %s persons: %s", partition_i, len(cdm_tables["person"]))
+        logging.debug("Partition %s observation periods: %s", partition_i, len(cdm_tables["observation_period"]))
+        logging.debug("Partition %s removed events having unwanted concept ID: %s", partition_i, removed_concepts)
+        logging.debug("Partition %s removed duplicate events: %s", partition_i, removed_duplicates)
+        logging.debug("Partition %s events mapped to visit by ID: %s", partition_i, mapping_stats["mapped_by_id"])
+        logging.debug("Partition %s events mapped to visit by date: %s", partition_i, mapping_stats["mapped_by_date"])
+        logging.debug("Partition %s events mapped to new visits: %s", partition_i, mapping_stats["mapped_to_new_visit"])
+        logging.debug("Partition %s existing visits: %s", partition_i, mapping_stats["existing_visits"])
+        logging.debug("Partition %s newly created visits: %s", partition_i, mapping_stats["new_visits"])
 
 
 def main(args: List[str]):

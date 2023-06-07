@@ -1,16 +1,33 @@
-from typing import Dict, List, Any
+from typing import List
 
 import unittest
-import pandas as pd
-import numpy as np
+import pyarrow as pa
+import pyarrow.compute as pc
+import datetime as dt
 
-import cdm_processing.cdm_processor_utils as cpu
+import cdm_processing.cdm_processor_utils as cdm_utils
+
+
+def d(dates_as_strings: List[str]):
+    """
+    Helper function: convert a list of dates as strings to a list of dates as datetime objects.
+    Args:
+        dates_as_strings: A list of dates as strings in the format YYYY-MM-DD.
+
+    Returns:
+        A list of dates as datetime objects.
+    """
+    return pc.strptime(
+        dates_as_strings,
+        format="%Y-%m-%d",
+        unit="s"
+    )
 
 
 class TestCdmProcessorUtils(unittest.TestCase):
 
     def setUp(self) -> None:
-        person = pd.DataFrame(
+        person = pa.Table.from_pydict(
             {
                 "person_id": [1],
                 "year_of_birth": [1970],
@@ -19,58 +36,37 @@ class TestCdmProcessorUtils(unittest.TestCase):
                 "gender_concept_id": [8507],
             }
         )
-        observation_period = pd.DataFrame(
+        observation_period = pa.Table.from_pydict(
             {
                 "person_id": [1, 1, 1],
                 "observation_period_id": [1, 2, 3],
-                "observation_period_start_date": ["2000-01-01", "2001-01-01", "2002-01-01"],
-                "observation_period_end_date": ["2000-07-01", "2001-07-01", "2002-07-01"],
+                "observation_period_start_date": d(["2000-01-01", "2001-01-01", "2002-01-01"]),
+                "observation_period_end_date": d(["2000-07-01", "2001-07-01", "2002-07-01"]),
             }
         )
-        observation_period["observation_period_start_date"] = pd.to_datetime(
-            observation_period["observation_period_start_date"]
-        )
-        observation_period["observation_period_end_date"] = pd.to_datetime(
-            observation_period["observation_period_end_date"]
-        )
-        visit_occurrence = pd.DataFrame(
+        visit_occurrence = pa.Table.from_pydict(
             {
-                "person_id": [1, 1, 1],
+                "person_id": pa.array([1, 1, 1]),
                 "visit_occurrence_id": [1, 2, 3],
                 "visit_concept_id": [9201, 9202, 9201],
-                "visit_start_date": ["2000-01-01", "2000-02-01", "2002-07-01"],
-                "visit_end_date": ["2000-01-01", "2000-02-05", "2002-07-01"],
+                "visit_start_date": d(["2000-01-01", "2000-02-01", "2002-07-01"]),
+                "visit_end_date": d(["2000-01-01", "2000-02-05", "2002-07-01"]),
             }
         )
-        visit_occurrence["visit_start_date"] = pd.to_datetime(
-            visit_occurrence["visit_start_date"]
-        )
-        visit_occurrence["visit_end_date"] = pd.to_datetime(
-            visit_occurrence["visit_end_date"]
-        )
-        condition_occurrence = pd.DataFrame(
+        condition_occurrence = pa.Table.from_pydict(
             {
                 "person_id": [1, 1, 1],
                 "condition_concept_id": [123, 456, 0],
-                "condition_start_date": ["2000-01-01", "2000-02-01", "2000-03-01"],
-                "condition_end_date": ["2000-01-01", "2000-02-01", "2000-03-01"],
-                "visit_occurrence_id": [1, np.NAN, np.NAN],
+                "condition_start_date": d(["2000-01-01", "2000-02-01", "2000-03-01"]),
+                "condition_end_date": d(["2000-01-01", "2000-02-01", "2000-03-01"]),
+                "visit_occurrence_id": [1, None, None],
             }
         )
-        condition_occurrence["condition_start_date"] = pd.to_datetime(
-            condition_occurrence["condition_start_date"]
-        )
-        condition_occurrence["condition_end_date"] = pd.to_datetime(
-            condition_occurrence["condition_end_date"]
-        )
-        death = pd.DataFrame(
+        death = pa.Table.from_pydict(
             {
                 "person_id": [1],
-                "death_date": ["2020-07-01"],
+                "death_date": d(["2020-07-01"]),
             }
-        )
-        death["death_date"] = pd.to_datetime(
-            death["death_date"]
         )
         self.cdm_tables = {"person": person,
                            "observation_period": observation_period,
@@ -78,107 +74,73 @@ class TestCdmProcessorUtils(unittest.TestCase):
                            "condition_occurrence": condition_occurrence,
                            "death": death}
 
-    def test_call_per_observation_period(self):
-        list_of_objects: List[Any] = []
+    def test_union_domain_tables(self):
+        event_table = cdm_utils.union_domain_tables(self.cdm_tables)
 
-        def add_to_list(observation_period: pd.Series, cdm_tables: Dict[str, pd.DataFrame]):
-            list_of_objects.append(cdm_tables)
-
-        list_of_objects.clear()
-        cpu.call_per_observation_period(self.cdm_tables, add_to_list)
-        assert len(list_of_objects) == 3
-        visits = list_of_objects[0]["visit_occurrence"]
-        assert len(visits) == 2
-        visits = list_of_objects[1]["visit_occurrence"]
-        assert len(visits) == 0
-        visits = list_of_objects[2]["visit_occurrence"]
-        assert len(visits) == 1
+        # First record should be death:
+        assert event_table["concept_id"].to_pylist()[0] == 4306655
 
     def test_remove_concepts(self):
-        new_cdm_tables, removed_counts = cpu.remove_concepts(cdm_tables=self.cdm_tables, concept_ids=[0])
-        assert removed_counts["condition_occurrence"] == 1
-        assert len(new_cdm_tables["condition_occurrence"] == 2)
+        event_table = cdm_utils.union_domain_tables(self.cdm_tables)
+        new_cdm_tables, removed_count = cdm_utils.remove_concepts(event_table=event_table, concept_ids=[0])
+        assert removed_count == 1
+        assert len(event_table) == 4
 
-    def test_union_domain_tables(self):
-        unioned_tables = cpu.union_domain_tables(self.cdm_tables)
-
-        # Last record should be death:
-        record = unioned_tables.iloc[-1]
-        assert record["concept_id"] == 4306655
-
-    def test_get_date_of_birth(self):
-        person = pd.Series(
+    def test_add_date_of_birth(self):
+        person = pa.Table.from_pydict(
             {
-                "person_id": 1,
-                "year_of_birth": 1970,
-                "month_of_birth": 5,
-                "day_of_birth": 7,
-                "gender_concept_id": 8507,
+                "person_id": [1, 2, 3],
+                "year_of_birth": [1970, 1980, 1990],
+                "month_of_birth": [5, 4, None],
+                "day_of_birth": [7, None, None],
+                "gender_concept_id": [8507, 8507, 8507],
             }
         )
-        dob = cpu.get_date_of_birth(person)
-        assert dob == pd.Timestamp(1970, 5, 7)
-
-        person = pd.Series(
-            {
-                "person_id": 1,
-                "year_of_birth": 1980,
-                "month_of_birth": 4,
-                "day_of_birth": np.NAN,
-                "gender_concept_id": 8507,
-            }
-        )
-        dob = cpu.get_date_of_birth(person)
-        assert dob == pd.Timestamp(1980, 4, 1)
-
-        person = pd.Series(
-            {
-                "person_id": 1,
-                "year_of_birth": 1990,
-                "month_of_birth": np.NAN,
-                "day_of_birth": np.NAN,
-                "gender_concept_id": 8507,
-            }
-        )
-        dob = cpu.get_date_of_birth(person)
-        assert dob == pd.Timestamp(1990, 1, 1)
+        dob = cdm_utils.add_date_of_birth(person)
+        assert dob["date_of_birth"].to_pylist()[0] == dt.datetime(1970, 5, 7)
+        assert dob["date_of_birth"].to_pylist()[1] == dt.datetime(1980, 4, 1)
+        assert dob["date_of_birth"].to_pylist()[2] == dt.datetime(1990, 1, 1)
 
     def test_group_by_visit(self):
-        visit_groups = cpu.group_by_visit(self.cdm_tables, link_by_date=True, create_missing_visits=True)
-        assert len(visit_groups) == 5
-        visit_group = visit_groups[0]  # First visit in CDM data, linked by ID
-        assert len(visit_group.cdm_tables["condition_occurrence"]) == 1
-        assert visit_group.cdm_tables["condition_occurrence"]["condition_concept_id"].iat[0] == 123
-        visit_group = visit_groups[1]  # Second visit in CDM data, linked by date
-        assert len(visit_group.cdm_tables["condition_occurrence"]) == 1
-        assert visit_group.cdm_tables["condition_occurrence"]["condition_concept_id"].iat[0] == 456
-        visit_group = visit_groups[2]  # New visit, derived from condition occurrence
-        assert visit_group.visit["visit_concept_id"] == 1
-        assert len(visit_group.cdm_tables["condition_occurrence"]) == 1
-        assert visit_group.cdm_tables["condition_occurrence"]["condition_concept_id"].iat[0] == 0
-        visit_group = visit_groups[3]  # Third visit in CDM data, linked by date
-        assert "condition_occurrence" not in visit_group.cdm_tables
-        visit_group = visit_groups[4]  # New visit, derived from death
-        assert visit_group.visit["visit_concept_id"] == 1
-        assert len(visit_groups[4].cdm_tables["death"]) == 1
+        event_table = cdm_utils.union_domain_tables(self.cdm_tables)
+        visits = self.cdm_tables["visit_occurrence"]
+        event_table, visits, stats = cdm_utils.link_events_to_visits(event_table=event_table,
+                                                                     visit_occurrence=visits,
+                                                                     mising_visit_concept_id=0)
+        assert pc.max(visits["internal_visit_id"]).as_py() == 4
+        # First visit in CDM data, linked by ID:
+        visit_group = event_table.filter(pc.equal(event_table["internal_visit_id"], 0))
+        assert len(visit_group) == 1
+        assert visit_group["concept_id"].to_pylist()[0] == 123
+        # Second visit in CDM data, linked by date
+        visit_group = event_table.filter(pc.equal(event_table["internal_visit_id"], 1))
+        assert len(visit_group) == 1
+        assert visit_group["concept_id"].to_pylist()[0] == 456
+        # Third visit in CDM data, has no events:
+        visit_group = event_table.filter(pc.equal(event_table["internal_visit_id"], 2))
+        assert len(visit_group) == 0
+        # New visit, derived from condition occurrence
+        visit_group = event_table.filter(pc.equal(event_table["internal_visit_id"], 3))
+        assert len(visit_group) == 1
+        assert visit_group["concept_id"].to_pylist()[0] == 0
+        visit = visits.filter(pc.equal(visits["internal_visit_id"], 3))
+        assert visit["visit_concept_id"].to_pylist()[0] == 0
+        # New visit, derived from death
+        visit_group = event_table.filter(pc.equal(event_table["internal_visit_id"], 4))
+        assert len(visit_group) == 1
+        assert visit_group["concept_id"].to_pylist()[0] == 4306655
 
-        visit_groups = cpu.group_by_visit(self.cdm_tables, link_by_date=True, create_missing_visits=False)
-        assert len(visit_groups) == 3
-        visit_group = visit_groups[0]  # First visit in CDM data, linked by ID
-        assert len(visit_group.cdm_tables["condition_occurrence"]) == 1
-        assert visit_group.cdm_tables["condition_occurrence"]["condition_concept_id"].iat[0] == 123
-        visit_group = visit_groups[1]  # Second visit in CDM data, linked by date
-        assert len(visit_group.cdm_tables["condition_occurrence"]) == 1
-        assert visit_group.cdm_tables["condition_occurrence"]["condition_concept_id"].iat[0] == 456
-        visit_group = visit_groups[2]  # Third visit in CDM data, linked by date
-        assert "condition_occurrence" not in visit_group.cdm_tables
-
-        visit_groups = cpu.group_by_visit(self.cdm_tables, link_by_date=False, create_missing_visits=False)
-        assert len(visit_groups) == 3
-        visit_group = visit_groups[1]
-        assert "condition_occurrence" not in visit_group.cdm_tables
-        visit_group = visit_groups[2]
-        assert "condition_occurrence" not in visit_group.cdm_tables
+    def test_remove_duplicate_events(self):
+        event_table = pa.Table.from_pydict(
+            {
+                "concept_id": [1000, 2000, 2000, 2000],
+                "start_date": d(["2000-01-01", "2001-01-01", "2001-01-01", "2001-01-02"]),
+            }
+        )
+        event_table, removed_count = cdm_utils.remove_duplicates(event_table)
+        assert removed_count == 1
+        assert len(event_table) == 3
+        assert event_table["concept_id"].to_pylist() == [1000, 2000, 2000]
 
 
 if __name__ == '__main__':
