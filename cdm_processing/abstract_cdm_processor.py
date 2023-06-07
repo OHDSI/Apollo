@@ -59,11 +59,6 @@ class AbstractCdmDataProcessor(ABC):
         create_logger(os.path.join(self._output_path, LOGGER_FILE_NAME))
 
     @abstractmethod
-    def _prepare(self):
-        # This function is called once overall, at the start, can be used to set up ancestry trees etc.
-        pass
-
-    @abstractmethod
     def _process_parition_cdm_data(self, cdm_tables: Dict[str, pa.Table], partition_i: int):
         # This functon is called for every parition (It is executed within a thread.)
         pass
@@ -82,7 +77,6 @@ class AbstractCdmDataProcessor(ABC):
 
     def _process_cdm_data(self):
         self._get_partition_counts()
-        self._prepare()
         if self._profile:
             logging.info("Profiling mode enabled, running first partition in single thread")
             self._process_partition(0)

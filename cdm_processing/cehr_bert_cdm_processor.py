@@ -17,8 +17,10 @@ def _create_cehr_bert_tables(cdm_tables: Dict[str, pa.Table], event_table: pa.Ta
     """
     Creates the table needed for the CEHR-BERT model.
     Args:
-        cdm_tables: A dictionary of CDM tables, with the table name as key and the table as value.
-        event_table: The table with the events to predict.
+        cdm_tables: A dictionary of CDM tables, with the table name as key and the table as value. The person table
+            should have the date_of_birth field added using the add_date_of_birth_to_person_table() function.
+        event_table: The table with the clinical events. This is a combination across the CDM domain tables, as created
+            by the union_cdm_tables() function.
 
     Returns:
         A table with the data needed for the CEHR-BERT model.
@@ -44,14 +46,15 @@ def _create_cehr_bert_tables(cdm_tables: Dict[str, pa.Table], event_table: pa.Ta
           "    WHEN days < 28 THEN 'W' || CAST(CAST(FLOOR(days / 7) AS INT) AS VARCHAR) " \
           "    WHEN days < 360 THEN 'M' || CAST(CAST(FLOOR(days / 30) AS INT) AS VARCHAR) " \
           "    ELSE 'LT' " \
-          "  END AS concept_id, " \
+          "  END AS concept_ids, " \
           "  0 AS visit_segments, " \
           "  0 AS dates, " \
           " -1 AS ages, " \
           "  visit_rank AS visit_concept_orders, " \
-          "  0 AS visit_concept_ids, " \
+          "  CAST('0' AS VARCHAR) AS visit_concept_ids, " \
           "  -2 AS sort_order, " \
-          "  observation_period_id " \
+          "  observation_period_id, " \
+          "  person_id " \
           "FROM (" \
           "  SELECT visits.visit_start_date - previous_visit.visit_end_date AS days," \
           "    visits.* " \
@@ -62,27 +65,29 @@ def _create_cehr_bert_tables(cdm_tables: Dict[str, pa.Table], event_table: pa.Ta
           ") intervals"
     con.execute(sql)
     sql = "CREATE TABLE start_tokens AS " \
-          "SELECT 'VS' AS concept_id, " \
+          "SELECT 'VS' AS concept_ids, " \
           "  visit_rank % 2 + 1 AS visit_segments, " \
           "  DATE_DIFF('week', DATE '1970-01-01', visit_start_date) AS dates, " \
           "  DATE_DIFF('month', date_of_birth, visit_start_date) AS ages, " \
           "  visit_rank AS visit_concept_orders, " \
-          "  visit_concept_id AS visit_concept_ids, " \
+          "  CAST(visit_concept_id AS VARCHAR) AS visit_concept_ids, " \
           "  -1 AS sort_order, " \
-          "  observation_period_id " \
+          "  observation_period_id, " \
+          "  person.person_id " \
           "FROM visits " \
           "INNER JOIN person " \
           "  ON visits.person_id = person.person_id"
     con.execute(sql)
     sql = "CREATE TABLE event_tokens AS " \
-          "SELECT CAST(concept_id AS VARCHAR) AS concept_id, " \
+          "SELECT CAST(concept_id AS VARCHAR) AS concept_ids, " \
           "  visit_rank % 2 + 1 AS visit_segments, " \
           "  DATE_DIFF('week', DATE '1970-01-01', start_date) AS dates, " \
           "  DATE_DIFF('month', date_of_birth,start_date) AS ages, " \
           "  visit_rank AS visit_concept_orders, " \
-          "  visit_concept_id AS visit_concept_ids, " \
+          "  CAST(visit_concept_id AS VARCHAR) AS visit_concept_ids, " \
           "  concept_id AS sort_order, " \
-          "  observation_period_id " \
+          "  observation_period_id, " \
+          "  person.person_id " \
           "FROM event_table " \
           "INNER JOIN visits " \
           "  ON event_table.internal_visit_id = visits.internal_visit_id " \
@@ -90,20 +95,22 @@ def _create_cehr_bert_tables(cdm_tables: Dict[str, pa.Table], event_table: pa.Ta
           "  ON visits.person_id = person.person_id"
     con.execute(sql)
     sql = "CREATE TABLE end_tokens AS " \
-          "SELECT 'VE' AS concept_id, " \
+          "SELECT 'VE' AS concept_ids, " \
           "  visit_rank % 2 + 1 AS visit_segments, " \
           "  DATE_DIFF('week', DATE '1970-01-01', visit_end_date) AS dates, " \
           "  DATE_DIFF('month', date_of_birth, visit_end_date) AS ages, " \
           "  visit_rank AS visit_concept_orders, " \
-          "  visit_concept_id AS visit_concept_ids, " \
+          "  CAST(visit_concept_id AS VARCHAR) AS visit_concept_ids, " \
           "  9223372036854775807 AS sort_order, " \
-          "  observation_period_id " \
+          "  observation_period_id, " \
+          "  person.person_id " \
           "FROM visits " \
           "INNER JOIN person " \
           "  ON visits.person_id = person.person_id"
     con.execute(sql)
     sql = "SELECT *, " \
-          "  ROW_NUMBER() OVER (PARTITION BY observation_period_id ORDER BY sort_order) AS orders " \
+          "  ROW_NUMBER() OVER " \
+          "    (PARTITION BY observation_period_id ORDER BY visit_concept_orders, sort_order) - 1  AS orders " \
           "FROM (" \
           "  SELECT * FROM interval_tokens " \
           "  UNION ALL " \
@@ -115,19 +122,34 @@ def _create_cehr_bert_tables(cdm_tables: Dict[str, pa.Table], event_table: pa.Ta
           ") tokens " \
           "ORDER BY observation_period_id, visit_concept_orders, sort_order"
     union_tokens = con.execute(sql).arrow()
+    con.execute("DROP TABLE visits")
     con.execute("DROP TABLE interval_tokens")
     con.execute("DROP TABLE start_tokens")
     con.execute("DROP TABLE event_tokens")
     con.execute("DROP TABLE end_tokens")
     duckdb.close(con)
-    cehr_bert_input = union_tokens.group_by("observation_period_id").aggregate(
-        [("concept_id", "list"), ("visit_segments", "list"), ("dates", "list"), ("ages", "list"),
-         ("visit_concept_orders", "list"), ("visit_concept_ids", "list"), ("orders", "list"),
-         ("concept_id", "count"),
-         ("visit_concept_orders", "max")]).rename_columns(
-        ["observation_period_id", "concept_id", "visit_segments", "dates",
-         "ages", "visit_concept_orders", "visit_concept_ids", "orders",
-         "num_of_concepts", "num_of_visits"])
+    cehr_bert_input = union_tokens.group_by("observation_period_id").aggregate([
+        ("person_id", "max"),
+        ("concept_ids", "list"),
+        ("visit_segments", "list"),
+        ("dates", "list"),
+        ("ages", "list"),
+        ("visit_concept_orders", "list"),
+        ("visit_concept_ids", "list"),
+        ("orders", "list"),
+        ("concept_ids", "count"),
+        ("visit_concept_orders", "max")]).rename_columns(
+        ["observation_period_id",
+         "person_id",
+         "concept_ids",
+         "visit_segments",
+         "dates",
+         "ages",
+         "visit_concept_orders",
+         "visit_concept_ids",
+         "orders",
+         "num_of_concepts",
+         "num_of_visits"])
     return cehr_bert_input
 
 
@@ -143,9 +165,6 @@ class CehrBertCdmDataProcessor(AbstractCdmDataProcessor):
         )
         self._map_drugs_to_ingredients = map_drugs_to_ingredients
         self._concepts_to_remove = concepts_to_remove
-
-    def _prepare(self):
-        super()._prepare()
         if self._map_drugs_to_ingredients:
             self._drug_mapping = cdm_utils.load_mapping_to_ingredients(self._cdm_data_path)
 

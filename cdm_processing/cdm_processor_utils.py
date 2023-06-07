@@ -51,6 +51,13 @@ VISIT_OCCURRENCE = "visit_occurrence"
 VISIT_OCCURRENCE_ID = "visit_occurrence_id"
 CONCEPT = "concept"
 CONCEPT_ANCESTOR = "concept_ancestor"
+YEAR_OF_BIRTH = "year_of_birth"
+MONTH_OF_BIRTH = "month_of_birth"
+DAY_OF_BIRTH = "day_of_birth"
+DATE_OF_BIRTH = "date_of_birth"
+SOURCE_CONCEPT_ID = "source_concept_id"
+TARGET_CONCEPT_ID = "target_concept_id"
+
 
 def add_date_of_birth(person: pa.Table) -> pa.Table:
     """
@@ -58,15 +65,15 @@ def add_date_of_birth(person: pa.Table) -> pa.Table:
     """
     dob = pc.strptime(
         pc.binary_join_element_wise(
-            pc.cast(person['year_of_birth'], pa.string()),
-            pc.cast(pc.coalesce(person['month_of_birth'], 1), pa.string()),
-            pc.cast(pc.coalesce(person['day_of_birth'], 1), pa.string()),
+            pc.cast(person[YEAR_OF_BIRTH], pa.string()),
+            pc.cast(pc.coalesce(person[MONTH_OF_BIRTH], 1), pa.string()),
+            pc.cast(pc.coalesce(person[DAY_OF_BIRTH], 1), pa.string()),
             "-"
         ),
         format="%Y-%m-%d",
         unit="s"
     )
-    return person.append_column("date_of_birth", dob)
+    return person.append_column(DATE_OF_BIRTH, dob)
 
 
 def union_domain_tables(cdm_tables: Dict[str, pa.Table]) -> pa.Table:
@@ -165,7 +172,7 @@ def link_events_to_visits(event_table: pa.Table,
     con = duckdb.connect(database=':memory:', read_only=False)
     con.register("event_table", event_table)
     con.register("visit_occurrence", visit_occurrence)
-    # Join by visit_occurrence_id
+    # Join by visit_occurrence_id:
     sql = "CREATE TABLE joined_1 AS " \
           "SELECT event_table.*, " \
           "   internal_visit_id AS id_from_id " \
@@ -173,8 +180,7 @@ def link_events_to_visits(event_table: pa.Table,
           "LEFT JOIN visit_occurrence " \
           "  ON event_table.visit_occurrence_id = visit_occurrence.visit_occurrence_id "
     con.execute(sql)
-
-    # Join by date
+    # Join by date:
     sql = "CREATE TABLE joined_2 AS " \
           "SELECT joined_1.person_id, " \
           "  joined_1.start_date, " \
@@ -191,8 +197,7 @@ def link_events_to_visits(event_table: pa.Table,
           "  joined_1.concept_id, " \
           "  joined_1.id_from_id"
     con.execute(sql)
-
-    # Create missing visits from unmapped event dates
+    # Create missing visits from unmapped event dates:
     sql = "CREATE TABLE missing_visits AS " \
           "SELECT person_id, " \
           "  start_date AS visit_start_date, " \
@@ -210,7 +215,7 @@ def link_events_to_visits(event_table: pa.Table,
     con.execute(sql)
     new_visits = con.execute("SELECT COUNT(*) FROM missing_visits").fetchone()[0]
     existing_visits = len(visit_occurrence)
-    # Join to the missing visits
+    # Join to the missing visits:
     sql = "CREATE TABLE joined_3 AS " \
           "SELECT joined_2.*, " \
           "   missing_visits.internal_visit_id AS id_from_new_visit " \
@@ -241,7 +246,6 @@ def link_events_to_visits(event_table: pa.Table,
           "  internal_visit_id " \
           "FROM missing_visits"
     visit_occurrence = con.execute(sql).arrow()
-
     sql = "SELECT CAST(SUM(mapped_by_id) AS INT) AS mapped_by_id, " \
           "  CAST(SUM(mapped_by_date) AS INT) AS mapped_by_date, " \
           "  CAST(SUM(mapped_by_new_visit) AS INT) AS mapped_to_new_visit " \
@@ -283,7 +287,7 @@ def load_mapping_to_ingredients(cdm_folder: str) -> pa.Table:
         right_keys=["concept_id"],
         join_type="inner",
     ).select(["descendant_concept_id", "ancestor_concept_id"]).rename_columns(
-        ["source_concept_id", "target_concept_id"])
+        [SOURCE_CONCEPT_ID, TARGET_CONCEPT_ID])
     return concept_ancestor
 
 
@@ -296,43 +300,19 @@ def map_concepts(cdm_table: pa.Table, concept_id_field: str, mapping: pa.Table) 
         mapping: A table with two columns: source_concept_id and target_concept_id.
 
     Returns:
-        A table with the same columns as cdm_table, but with the concept ID field replaced by the target_concept_id. Any
-        records that did not have a matching concept were removed. Any records that map to multiple concepts are
-        duplicated.
+        A table with the same columns as cdm_table, but with the values in the concept ID field replaced by the
+        target_concept_id. Any records that did not have a matching concept were removed. Any records that map to
+        multiple concepts are duplicated.
     """
     intermediate_columns = cdm_table.column_names
     intermediate_columns.remove(concept_id_field)
-    intermediate_columns.append("target_concept_id")
-    columns = cdm_table.column_names
-    columns.remove(concept_id_field)
-    columns.append(concept_id_field)
+    intermediate_columns.append(TARGET_CONCEPT_ID)
+    final_columns = cdm_table.column_names
+    final_columns.remove(concept_id_field)
+    final_columns.append(concept_id_field)
     return cdm_table.join(
         mapping,
         keys=[concept_id_field],
-        right_keys=["source_concept_id"],
+        right_keys=[SOURCE_CONCEPT_ID],
         join_type="inner",
-    ).select(intermediate_columns).rename_columns(columns)
-
-
-def add_observation_period_id(visit_occurrence: pa.Table, observation_period_table: pa.Table) -> pa.Table:
-    """
-    Adds the observation period ID to the visit occurrence table.
-    Args:
-        visit_occurrence: The visit occurrence table.
-        observation_period_table: The observation period table.
-
-    Returns:
-        A table with the same columns as visit_occurrence, but with the observation period ID added.
-    """
-    con = duckdb.connect(database=':memory:', read_only=False)
-    con.register("visit_occurrence", visit_occurrence)
-    con.register("observation_period_table", observation_period_table)
-    sql = "SELECT visit_occurrence.*, observation_period_table.observation_period_id " \
-          "FROM visit_occurrence " \
-          "INNER JOIN observation_period_table " \
-          "  ON visit_occurrence.person_id = observation_period_table.person_id " \
-          "    AND visit_occurrence.visit_start_date >= observation_period_table.observation_period_start_date " \
-          "    AND visit_occurrence.visit_start_date <= observation_period_table.observation_period_end_date"
-    result = con.execute(sql).arrow()
-    duckdb.close(con)
-    return result
+    ).select(intermediate_columns).rename_columns(final_columns)
