@@ -180,7 +180,7 @@ class CehrBertCdmDataProcessor(AbstractCdmDataProcessor):
                                                                  mapping=self._drug_mapping)
         event_table = cdm_utils.union_domain_tables(cdm_tables)
         event_table, removed_concepts = cdm_utils.remove_concepts(event_table=event_table,
-                                                                  concept_ids=[0, 900000010])
+                                                                  concept_ids=self._concepts_to_remove)
         event_table, removed_duplicates = cdm_utils.remove_duplicates(event_table=event_table)
         event_table, visit_occurrence, mapping_stats = cdm_utils.link_events_to_visits(event_table=event_table,
                                                                                        visit_occurrence=cdm_tables[

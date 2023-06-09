@@ -65,6 +65,8 @@ class Simulation:
             np.random.uniform(size=settings.dynamic_state_count, high=0.01),
             np.random.uniform(size=settings.fixed_state_count + 2)
         ))
+        # Note: really only need half of these matrices to be filled, because interaction matrix will be symmetrical 
+        # over diagonal, but it's easier to just fill them completely:
         self._dynamic_state_entry_coefs = []
         for i in range(settings.dynamic_state_count):
             matrix = np.zeros(self._state_count * self._state_count)
