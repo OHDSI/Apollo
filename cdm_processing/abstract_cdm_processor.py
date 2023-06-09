@@ -39,7 +39,7 @@ class AbstractCdmDataProcessor(ABC):
                    easier debugging.
     """
 
-    def __init__(self, cdm_data_path: str, output_path: str, max_cores: int = -1):
+    def __init__(self, cdm_data_path: str, output_path: str, max_cores: int = 1):
         if not os.path.exists(output_path):
             os.makedirs(output_path)
         self._cdm_data_path = cdm_data_path
@@ -107,7 +107,9 @@ class AbstractCdmDataProcessor(ABC):
         logging.debug("Starting partition %s of %s", partition_i, self._person_partition_count)
 
         file_name = "part{:04d}.parquet".format(partition_i + 1)
-        cdm_tables = {table: pq.read_table(os.path.join(self._cdm_data_path, table, file_name)) for table in CDM_TABLES}
+        available_tables = [table for table in CDM_TABLES if table in os.listdir(self._cdm_data_path)]
+        cdm_tables = {table: pq.read_table(os.path.join(self._cdm_data_path, table, file_name)) for table in
+                      available_tables}
         self._process_parition_cdm_data(cdm_tables, partition_i)
 
         logging.debug("Finished partition %s of %s", partition_i, self._person_partition_count)

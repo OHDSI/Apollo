@@ -174,9 +174,10 @@ class CehrBertCdmDataProcessor(AbstractCdmDataProcessor):
         Process a single partition of CDM data, and save the result to disk.
         """
         cdm_tables["person"] = cdm_utils.add_date_of_birth(cdm_tables["person"])
-        cdm_tables["drug_exposure"] = cdm_utils.map_concepts(cdm_table=cdm_tables["drug_exposure"],
-                                                             concept_id_field="drug_concept_id",
-                                                             mapping=self._drug_mapping)
+        if self._map_drugs_to_ingredients:
+            cdm_tables["drug_exposure"] = cdm_utils.map_concepts(cdm_table=cdm_tables["drug_exposure"],
+                                                                 concept_id_field="drug_concept_id",
+                                                                 mapping=self._drug_mapping)
         event_table = cdm_utils.union_domain_tables(cdm_tables)
         event_table, removed_concepts = cdm_utils.remove_concepts(event_table=event_table,
                                                                   concept_ids=[0, 900000010])
