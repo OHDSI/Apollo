@@ -1,6 +1,6 @@
 import cProfile
 from abc import ABC, abstractmethod
-from multiprocessing import Pool
+import multiprocessing
 import os
 from typing import Dict
 import logging
@@ -85,7 +85,7 @@ class AbstractCdmDataProcessor(ABC):
             for partition_i in range(self._person_partition_count):
                 self._process_partition(partition_i)
         else:
-            pool = Pool(processes=self._max_cores)
+            pool = multiprocessing.get_context("spawn").Pool(processes=self._max_cores)
             tasks = range(self._person_partition_count)
             work = self._process_partition
             for _ in tqdm.tqdm(pool.imap_unordered(work, tasks), total=len(tasks)):
