@@ -149,9 +149,15 @@ class CdmData:
     def log_statistics(self, partition_i: int):
         logging.debug("Partition %s persons: %s", partition_i, len(self._person_person_id))
         logging.debug("Partition %s visit_occurrences: %s", partition_i, len(self._visit_occurrence_person_id))
+        total_days = np.sum(np.subtract(self._observation_period_observation_period_end_date.collect(),
+                                        self._observation_period_observation_period_start_date.collect()).view(
+            np.int64))
+        logging.debug("Partition %s mean days between visits: %.1f", partition_i,
+                      total_days / len(self._visit_occurrence_person_id))
         logging.debug("Partition %s mean concepts per visit: %.1f", partition_i,
                       len(self._condition_occurrence_person_id) / len(self._visit_occurrence_person_id))
-        total_time = np.sum(np.subtract(self._observation_period_observation_period_end_date.collect(),
-                            self._observation_period_observation_period_start_date.collect()).view(np.int64))
-        logging.debug("Partition %s mean days between visits: %.1f", partition_i,
-                      total_time / len(self._visit_occurrence_person_id))
+        logging.debug("Partition %s unique concept count: %s", partition_i,
+                      len(np.unique(self._condition_occurrence_condition_concept_id.collect())))
+        logging.debug("Partition %s percent ER visits: %.1f%%", partition_i,
+                      100 * sum(self._visit_occurrence_visit_concept_id.collect() == 9203) /
+                      len(self._visit_occurrence_person_id))
