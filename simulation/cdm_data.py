@@ -4,6 +4,7 @@ data is stored in dynamic arrays, which are then concatenated into a single nump
 complete. The data is then written to parquet files.
 """
 import os
+from collections import defaultdict
 from typing import Type
 import logging
 
@@ -49,7 +50,7 @@ class DynamicArray:
 
 def _create_folder_if_not_exists(folder: str):
     if not os.path.exists(folder):
-        os.makedirs(folder)
+        os.makedirs(folder, exist_ok=True)
 
 
 class CdmData:
@@ -161,3 +162,45 @@ class CdmData:
         logging.debug("Partition %s percent ER visits: %.1f%%", partition_i,
                       100 * sum(self._visit_occurrence_visit_concept_id.collect() == 9203) /
                       len(self._visit_occurrence_person_id))
+
+
+class _Labels:
+
+    person_id: DynamicArray
+    label: DynamicArray
+
+    def __init__(self):
+        super().__init__()
+        self.person_id = DynamicArray(np.int64)
+        self.label = DynamicArray(bool)
+
+
+class CdmDataWithLabels(CdmData):
+
+    def __init__(self):
+        super().__init__()
+        self._concept_id_to_labels: defaultdict[int, _Labels] = defaultdict(_Labels)
+
+    def add_label(self, person_id: int, concept_id: int, label: bool):
+        labels = self._concept_id_to_labels[concept_id]
+        labels.person_id.append(person_id)
+        labels.label.append(label)
+
+    def write_to_parquet(self, root_folder: str, partition_i: int):
+        super().write_to_parquet(root_folder, partition_i)
+        for concept_id, labels in self._concept_id_to_labels.items():
+            table = pa.Table.from_arrays(arrays=[
+                labels.person_id.collect(),
+                labels.label.collect()],
+                names=["person_id", "label"])
+            folder_name = "label_c{:04d}".format(concept_id)
+            _create_folder_if_not_exists(os.path.join(root_folder, folder_name))
+            file_name = "part{:04d}.parquet".format(partition_i + 1)
+            pq.write_table(table, os.path.join(root_folder, folder_name, file_name))
+
+    def log_statistics(self, partition_i: int):
+        super().log_statistics(partition_i)
+        means = DynamicArray(np.float64)
+        for labels in self._concept_id_to_labels.values():
+            means.append(np.mean(labels.label.collect()))
+        logging.debug("Partition %s percent labels positive: %.1f%%", partition_i, 100 * np.mean(means.collect()))

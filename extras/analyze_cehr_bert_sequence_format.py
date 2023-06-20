@@ -8,8 +8,13 @@ import os
 # file = pq.read_table(os.path.join(folder, "part-00000-c0fda67a-757c-41ba-8c31-a69d1f7bf530-c000.snappy.parquet"))
 folder = "D:/GPM_CCAE/patient_sequence"
 file = "part0001.parquet"
-folder = "D:/GPM_CCAE/patient_sequence_2"
-file = "part0001.parquet"
+folder = "D:/GPM_MDCD/cehr-bert/hospitalization"
+file = "part-00000-41b43fb8-f5c0-4d94-8455-830e730bc13d-c000.snappy.parquet"
+folder = "D:/GPM_MDCD/cehr-bert/hopitalization_outcome"
+file = "part-00000-eac1df12-7972-46d8-8b3f-e98f7bab9090-c000.snappy.parquet"
+folder = "D:/GPM_MDCD/cehr-bert/hospitalization_target"
+file = "part-00000-b6bd2591-3b0b-4582-a1ed-b00bb9d49963-c000.snappy.parquet"
+
 pfile = pq.read_table(os.path.join(folder, file))
 
 x = pfile.to_pandas()
@@ -17,7 +22,7 @@ print(x.dtypes)
 for column in x.columns:
   print(f"column: {column}")
   print(x[column].iat[0])
-  print(x[column].iat[0].dtype)
+  # print(x[column].iat[0].dtype)
 
 len(x)
 
