@@ -63,7 +63,7 @@ class TestDataGenerating(unittest.TestCase):
         assert concept_tokenizer.encode([tokenizer.OUT_OF_VOCABULARY_TOKEN]) == \
                [concept_tokenizer.get_out_of_vocabulary_token_id()]
         assert concept_tokenizer.encode([tokenizer.MASK_TOKEN]) == [concept_tokenizer.get_mask_token_id()]
-        assert concept_tokenizer.encode([tokenizer.UNUSED_TOKEN]) == [concept_tokenizer.get_unused_token_id()]
+        assert concept_tokenizer.encode([tokenizer.PADDING_TOKEN]) == [concept_tokenizer.get_padding_token_id()]
         test_concept_ids = np.array(["VS", "123", "456", "VE", "W1", "VS", "456", "VE"], dtype=str)
         encoding = concept_tokenizer.encode(test_concept_ids)
         decoding = concept_tokenizer.decode(encoding)
@@ -88,27 +88,7 @@ class TestDataGenerating(unittest.TestCase):
                                                            learning_objectives=learning_objectives)
         assert len(bert_data_generator) == 1
         batch_count = 0
-        for batch_input, batch_output in bert_data_generator.generator():
-            # TODO: add some specific tests on output
-            batch_count += 1
-            break
-        assert batch_count == 1
-
-
-    def test_dataset_from_generator(self):
-        learning_objectives = [learning_objective.MaskedLanguageModelLearningObjective(work_folder=self.parquet_folder),
-                               learning_objective.VisitPredictionLearningObjective(work_folder=self.parquet_folder)]
-        bert_data_generator = data_generator.DataGenerator(training_data_path=self.parquet_folder,
-                                                           batch_size=4,
-                                                           max_sequence_length=10,
-                                                           min_sequence_length=5,
-                                                           is_training=True,
-                                                           learning_objectives=learning_objectives)
-        # from_generator() verifies if the output of the generator matches the schema:
-        dataset = tf.data.Dataset.from_generator(generator=bert_data_generator.generator,
-                                                 output_types=bert_data_generator.get_tf_dataset_schema())
-        batch_count = 0
-        for batch in dataset:
+        for batch in bert_data_generator.generator():
             # TODO: add some specific tests on output
             batch_count += 1
             break

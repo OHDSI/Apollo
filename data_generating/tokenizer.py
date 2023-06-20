@@ -5,7 +5,7 @@ from typing import List, Union
 
 import numpy as np
 
-UNUSED_TOKEN = "[UNUSED]"
+PADDING_TOKEN = "[PADDING]"
 MASK_TOKEN = "[MASK]"
 OUT_OF_VOCABULARY_TOKEN = "[OOV]"
 
@@ -18,9 +18,9 @@ class ConceptTokenizer:
     def __init__(self):
         self._word_index = {}
         self._index_word = {}
-        self._oov_token_index = 1
-        self._unused_token_index = 2
-        self._mask_token_index = 3
+        self._padding_token_index = 0
+        self._mask_token_index = 1
+        self._oov_token_index = 2
 
     def fit_on_concept_sequences(self, parquet_data_iterator: ParquetDataIterator, column_name: str):
         """
@@ -33,12 +33,12 @@ class ConceptTokenizer:
         for row in parquet_data_iterator:
             for concept_id in row[column_name]:
                 words.add(concept_id)
-        vocabulary = [OUT_OF_VOCABULARY_TOKEN, UNUSED_TOKEN, MASK_TOKEN]
+        vocabulary = [PADDING_TOKEN, MASK_TOKEN, OUT_OF_VOCABULARY_TOKEN]
         vocabulary.extend(words)
-        self._word_index = dict(zip(vocabulary, list(range(1, len(vocabulary) + 1))))
+        self._word_index = dict(zip(vocabulary, list(range(0, len(vocabulary)))))
         self._index_word = {index: word for word, index in self._word_index.items()}
         self._oov_token_index = self._word_index[OUT_OF_VOCABULARY_TOKEN]
-        self._unused_token_index = self._word_index[UNUSED_TOKEN]
+        self._padding_token_index = self._word_index[PADDING_TOKEN]
         self._mask_token_index = self._word_index[MASK_TOKEN]
 
     def encode(self, concept_ids: Union[List[str], np.ndarray[str]]) -> List[int]:
@@ -57,8 +57,8 @@ class ConceptTokenizer:
     def get_vocab_size(self):
         return len(self._word_index)
 
-    def get_unused_token_id(self):
-        return self._unused_token_index
+    def get_padding_token_id(self):
+        return self._padding_token_index
 
     def get_mask_token_id(self):
         return self._mask_token_index
@@ -67,7 +67,7 @@ class ConceptTokenizer:
         return self._oov_token_index
 
     def get_first_token_id(self):
-        return 4
+        return 3
 
     def get_last_token_id(self):
         return self.get_vocab_size() - 1
@@ -83,6 +83,6 @@ def load_from_json(file_name: str):
         self._word_index = json.load(f)
     self._index_word = {index: word for word, index in self._word_index.items()}
     self._oov_token_index = self._word_index[OUT_OF_VOCABULARY_TOKEN]
-    self._unused_token_index = self._word_index[UNUSED_TOKEN]
+    self._padding_token_index = self._word_index[PADDING_TOKEN]
     self._mask_token_index = self._word_index[MASK_TOKEN]
     return self

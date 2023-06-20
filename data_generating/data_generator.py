@@ -13,9 +13,25 @@ from data_generating.parquet_data_iterator import ParquetDataIterator
 SEQUENCE_LENGTH_COLUMN_NAME = "num_of_concepts"
 
 
+class Batch:
+    """
+    A batch of data for PyTorch
+    """
+
+    def __init__(self, inputs: Dict, outputs: Dict):
+        self._inputs = inputs
+        self._outputs = outputs
+
+    def get_inputs(self) -> Dict:
+        return self._inputs
+
+    def get_outputs(self) -> Dict:
+        return self._outputs
+
+
 class DataGenerator(AbstractDataGenerator):
     """
-    Generate data for tensorflow from parquet files. Iterates over the sequence data created using the CDM
+    Generate data for PyTorch from parquet files. Iterates over the sequence data created using the CDM
     processing. To be used with tf.data.Dataset.from_generator
     """
 
@@ -63,16 +79,16 @@ class DataGenerator(AbstractDataGenerator):
     def get_max_sequence_length(self) -> int:
         return self._max_sequence_length
 
-    def generator(self) -> Iterator[tuple[Dict, Dict]]:
-        """Generate data for tensorflow"""
+    def generator(self) -> Iterator[Batch]:
+        """Generate data for PyTorch"""
         while True:
             try:
                 yield self._get_batch()
             except StopIteration:
                 break
 
-    def _get_batch(self) -> tuple[Dict, Dict]:
-        """Get a batch of data for tensorflow"""
+    def _get_batch(self) -> Batch:
+        """Get a batch of data for PyTorch"""
         row_batch = self._get_row_batch()
         input_dicts = defaultdict(list)
         output_dicts = defaultdict(list)
@@ -84,7 +100,7 @@ class DataGenerator(AbstractDataGenerator):
                     input_dicts[key].append(value)
                 for key, value in outputs.items():
                     output_dicts[key].append(value)
-        return dict(input_dicts), dict(output_dicts)
+        return Batch(dict(input_dicts), dict(output_dicts))
 
     def _get_row_batch(self) -> list[pd.DataFrame]:
         """Get a batch of rows"""
@@ -103,22 +119,22 @@ class DataGenerator(AbstractDataGenerator):
     def _create_begin_end_indices(self, row: pd.DataFrame) -> tuple[int, int]:
         """Create begin and end indices for a row, either by sampling a sequence or using the whole sequence"""
         seq_length = row[SEQUENCE_LENGTH_COLUMN_NAME]
-        # if self._is_training:
-        cursor = random.randint(0, seq_length - 1)
-        half_window_size = int(self._max_sequence_length / 2)
-        start_index = max(0, cursor - half_window_size)
-        end_index = min(cursor + half_window_size, seq_length)
-        if start_index < end_index:
-            return start_index, end_index
+        if self._is_training:
+            cursor = random.randint(0, seq_length - 1)
+            half_window_size = int(self._max_sequence_length / 2)
+            start_index = max(0, cursor - half_window_size)
+            end_index = min(cursor + half_window_size, seq_length)
+            if start_index < end_index:
+                return start_index, end_index
+            else:
+                return 0, seq_length
         else:
             return 0, seq_length
-        # else:
-        #     return 0, seq_length
 
     def get_tf_dataset_schema(self):
         """
-        Combine the input and output tensorflow data schema from multiple learning objectives
-        :return: A tuple of input and output tensorflow data schema.
+        Combine the input and output PyTorch data schema from multiple learning objectives
+        :return: A tuple of input and output PyTorch data schema.
         """
         input_dict_schemas = []
         output_dict_schemas = []

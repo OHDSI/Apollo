@@ -19,14 +19,14 @@ class LayerInputNames:
     MASKED_VISIT_CONCEPTS = "masked_visit_concepts"
     MASK_VISIT = "mask_visit"
     VISIT_PREDICTIONS = "visit_predictions"
-    MASKED_CONCEPT_IDS = "masked_concept_ids"
-    CONCEPT_IDS = "concept_ids"
+    MASKED_TOKEN_IDS = "masked_token_ids"
+    TOKEN_IDS = "token_ids"
     MASK = "mask"
-    TIME_STAMPS = "time_stamps"
+    DATES = "dates"
     VISIT_SEGMENTS = "visit_segments"
     AGES = "ages"
     VISIT_CONCEPT_ORDERS = "visit_concept_orders"
-    CONCEPT_PREDICTIONS = "concept_predictions"
+    TOKEN_PREDICTIONS = "token_predictions"
 
 
 def _pad_sequence(sequence: np.ndarray[any], padding_value: any, max_sequence_length: int) -> np.ndarray[any]:
@@ -139,12 +139,12 @@ class VisitPredictionLearningObjective(LearningObjective):
         visit_token_ids = self._visit_tokenizer.encode(visit_concept_ids)
         masked_visit_token_ids, output_mask = self._mask_visit_concepts(visit_token_ids)
         masked_visit_token_ids = _pad_sequence(sequence=masked_visit_token_ids,
-                                               padding_value=self._visit_tokenizer.get_unused_token_id(),
+                                               padding_value=self._visit_tokenizer.get_padding_token_id(),
                                                max_sequence_length=self._max_sequence_length)
         visit_token_ids = _pad_sequence(sequence=masked_visit_token_ids,
-                                        padding_value=self._visit_tokenizer.get_unused_token_id(),
+                                        padding_value=self._visit_tokenizer.get_padding_token_id(),
                                         max_sequence_length=self._max_sequence_length)
-        visit_mask = (visit_token_ids == self._visit_tokenizer.get_unused_token_id()).astype(int)
+        visit_mask = (visit_token_ids == self._visit_tokenizer.get_padding_token_id()).astype(int)
         combined_label = np.stack([visit_token_ids, output_mask], axis=-1)
         input_dict = {
             LayerInputNames.MASKED_VISIT_CONCEPTS: masked_visit_token_ids,
@@ -191,15 +191,14 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
 
     def get_tf_dataset_schema(self):
         input_dict_schema = {
-            LayerInputNames.MASKED_CONCEPT_IDS: tf.int32,
-            LayerInputNames.CONCEPT_IDS: tf.int32,
+            LayerInputNames.MASKED_TOKEN_IDS: tf.int32,
             LayerInputNames.MASK: tf.int32,
-            LayerInputNames.TIME_STAMPS: tf.int32,
+            LayerInputNames.DATES: tf.int32,
             LayerInputNames.VISIT_SEGMENTS: tf.int32,
             LayerInputNames.AGES: tf.int32,
             LayerInputNames.VISIT_CONCEPT_ORDERS: tf.int32
         }
-        output_dict_schema = {LayerInputNames.CONCEPT_PREDICTIONS: tf.int32}
+        output_dict_schema = {LayerInputNames.TOKEN_PREDICTIONS: tf.int32}
         return input_dict_schema, output_dict_schema
 
     def process_row(self, row: pd.DataFrame, start_index: int, end_index: int) -> tuple[Dict, Dict]:
@@ -212,14 +211,21 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
         token_ids = np.array(self._concept_tokenizer.encode(concept_ids))
         # Normalize the visit_orders using the smallest visit_concept_orders
         visit_concept_orders = visit_concept_orders - min(visit_concept_orders)
-        masked_token_ids, output_mask = self._mask_concepts(token_ids)
+        mask = np.zeros(len(concept_ids), dtype=np.int32)
+        masked_token_ids, output_mask = self._mask_tokens(token_ids)
 
         token_ids = _pad_sequence(sequence=token_ids,
-                                  padding_value=self._concept_tokenizer.get_unused_token_id(),
+                                  padding_value=self._concept_tokenizer.get_padding_token_id(),
                                   max_sequence_length=self._max_sequence_length)
         masked_token_ids = _pad_sequence(sequence=masked_token_ids,
-                                         padding_value=self._concept_tokenizer.get_unused_token_id(),
+                                         padding_value=self._concept_tokenizer.get_padding_token_id(),
                                          max_sequence_length=self._max_sequence_length)
+        mask = _pad_sequence(sequence=mask,
+                             padding_value=1,
+                             max_sequence_length=self._max_sequence_length)
+        output_mask = _pad_sequence(sequence=output_mask,
+                                    padding_value=0,
+                                    max_sequence_length=self._max_sequence_length)
         visit_segments = _pad_sequence(sequence=visit_segments,
                                        padding_value=self._max_sequence_length,
                                        max_sequence_length=self._max_sequence_length)
@@ -232,37 +238,30 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
         visit_concept_orders = _pad_sequence(sequence=visit_concept_orders,
                                              padding_value=self._max_sequence_length - 1,
                                              max_sequence_length=self._max_sequence_length)
-
-        output_mask = (token_ids == self._concept_tokenizer.get_unused_token_id()).astype(int)
-        combined_label = np.stack([token_ids, output_mask], axis=-1)
-        input_dict = {LayerInputNames.MASKED_CONCEPT_IDS: masked_token_ids,
-                      LayerInputNames.CONCEPT_IDS: token_ids,
-                      LayerInputNames.MASK: output_mask,
-                      LayerInputNames.TIME_STAMPS: dates,
+        input_dict = {LayerInputNames.MASKED_TOKEN_IDS: masked_token_ids,
+                      LayerInputNames.MASK: mask,
+                      LayerInputNames.DATES: dates,
                       LayerInputNames.AGES: ages,
                       LayerInputNames.VISIT_SEGMENTS: visit_segments,
                       LayerInputNames.VISIT_CONCEPT_ORDERS: visit_concept_orders}
-
-        output_dict = {LayerInputNames.CONCEPT_PREDICTIONS: combined_label}
+        output_dict = {LayerInputNames.TOKEN_IDS: token_ids,
+                       LayerInputNames.MASK: output_mask}
         return input_dict, output_dict
 
-    def _mask_concepts(self, concepts):
-        masked_concepts = concepts.copy()
+    def _mask_tokens(self, token_ids: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        masked_token_ids = token_ids.copy()
         output_mask = np.zeros((self._max_sequence_length,), dtype=int)
         if self._is_training:
-            for word_pos in range(0, len(concepts)):
-                if concepts[word_pos] == self._concept_tokenizer.get_unused_token_id():
-                    break
-
+            for word_pos in range(0, len(token_ids)):
                 if random.random() < 0.15:
                     dice = random.random()
                     if dice < 0.8:
-                        masked_concepts[word_pos] = self._concept_tokenizer.get_mask_token_id()
+                        masked_token_ids[word_pos] = self._concept_tokenizer.get_mask_token_id()
                     elif dice < 0.9:
-                        masked_concepts[word_pos] = random.randint(
+                        masked_token_ids[word_pos] = random.randint(
                             self._concept_tokenizer.get_first_token_id(),
                             self._concept_tokenizer.get_last_token_id())
                     # else: 10% of the time we just leave the token as is
                     output_mask[word_pos] = 1
 
-        return masked_concepts, output_mask
+        return masked_token_ids, output_mask
