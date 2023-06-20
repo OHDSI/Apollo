@@ -103,17 +103,17 @@ class DataGenerator(AbstractDataGenerator):
     def _create_begin_end_indices(self, row: pd.DataFrame) -> tuple[int, int]:
         """Create begin and end indices for a row, either by sampling a sequence or using the whole sequence"""
         seq_length = row[SEQUENCE_LENGTH_COLUMN_NAME]
-        if self._is_training:
-            cursor = random.randint(0, seq_length - 1)
-            half_window_size = int(self._max_sequence_length / 2)
-            start_index = max(0, cursor - half_window_size)
-            end_index = min(cursor + half_window_size, seq_length)
-            if start_index < end_index:
-                return start_index, end_index
-            else:
-                return 0, seq_length
+        # if self._is_training:
+        cursor = random.randint(0, seq_length - 1)
+        half_window_size = int(self._max_sequence_length / 2)
+        start_index = max(0, cursor - half_window_size)
+        end_index = min(cursor + half_window_size, seq_length)
+        if start_index < end_index:
+            return start_index, end_index
         else:
             return 0, seq_length
+        # else:
+        #     return 0, seq_length
 
     def get_tf_dataset_schema(self):
         """

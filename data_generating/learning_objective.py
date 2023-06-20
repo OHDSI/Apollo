@@ -209,7 +209,7 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
         ages = row.ages[start_index:end_index]
         visit_concept_orders = row.visit_concept_orders[start_index:end_index]
 
-        token_ids = self._concept_tokenizer.encode(concept_ids)
+        token_ids = np.array(self._concept_tokenizer.encode(concept_ids))
         # Normalize the visit_orders using the smallest visit_concept_orders
         visit_concept_orders = visit_concept_orders - min(visit_concept_orders)
         masked_token_ids, output_mask = self._mask_concepts(token_ids)

@@ -6,3 +6,4 @@ tqdm~=4.65.0
 tensorflow~=2.12.0
 keras~=2.12.0
 duckdb~=0.8.0
+torch~=2.0.1
