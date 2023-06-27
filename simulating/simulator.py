@@ -1,5 +1,5 @@
 """
-Simulate CDM data for testing purposes. Persons are simulated to have hidden disease states. Some states are fixes at
+Simulate CDM data for testing purposes. Persons are simulated to have hidden disease states. Some states are fixed at
 the start, to simulate fixed traits such as genetics, while the remaining states are dynamic. The probability to enter
 a dynamic disease state depending on the current disease states in a non-linear way (i.e. using interactions between
 states). Concepts are simulated to be observed with probabilities depending on the current disease states, again in a
@@ -17,6 +17,7 @@ import multiprocessing
 import os
 import sys
 from typing import List
+from dataclasses import dataclass
 
 import numpy as np
 import tqdm as tqdm
@@ -32,54 +33,41 @@ JSON_FILE_NAME = "_simulation.json"
 PRETRAINING_FOLDER = "pretraining"
 TRAIN_FOLDER = "train"
 TEST_FOLDER = "test"
+STATE_TRANSITION_INTERCEPT = -6  # Log probability intercept of transitioning to a new state.
+CONCEPT_OBSERVATION_INTERCEPT = -8  # Log probability intercept of observing a concept.
+AGE_INDEX = -2
+GENDER_INDEX = -1
 
 
 def logistic(x):
     return 1 / (1 + np.exp(-x))
 
 
+@dataclass
 class SimulationSettings:
-    """
-    Settings for the simulation.
-    """
-
-    def __init__(self,
-                 dynamic_state_count: int = 10,
-                 fixed_state_count: int = 5,
-                 concept_count: int = 100,
-                 serious_concept_count: int = 10,
-                 visit_multiplier: int = 2,
-                 days_to_simulate: int = 365 * 2):
-        self.dynamic_state_count = dynamic_state_count
-        self.fixed_state_count = fixed_state_count
-        self.concept_count = concept_count
-        self.serious_concept_count = serious_concept_count
-        self.visit_multiplier = visit_multiplier
-        self.days_to_simulate = days_to_simulate
+    dynamic_state_count: int = 10
+    fixed_state_count: int = 5
+    concept_count: int = 100
+    serious_concept_count: int = 10
+    visit_multiplier: int = 2
+    days_to_simulate: int = 365 * 2
 
 
+@dataclass
 class SimulationTask:
     partition_count: int
 
 
+@dataclass
 class PreTrainingTask(SimulationTask):
     person_count: int
 
-    def __init__(self, partition_count: int, person_count: int):
-        self.partition_count = partition_count
-        self.person_count = person_count
 
-
+@dataclass
 class PredictionTask(SimulationTask):
     train_person_count: int
     test_person_count: int
     prediction_window: int
-
-    def __init__(self, partition_count: int, train_person_count: int, test_person_count: int, prediction_window: int):
-        self.partition_count = partition_count
-        self.train_person_count = train_person_count
-        self.test_person_count = test_person_count
-        self.prediction_window = prediction_window
 
 
 def _simulate_date_of_birth(current_date: np.datetime64, age_indicator: int) -> tuple[int, int, int]:
@@ -104,7 +92,7 @@ def _simulate_date_of_birth(current_date: np.datetime64, age_indicator: int) -> 
            birth_date.astype('datetime64[D]').astype(int) % 31 + 1
 
 
-class Simulation:
+class Simulator:
     # Note: Tried using scipy.sparse.csr_matrix, but it was 100 times slower than using a dense matrix.
 
     def __init__(self,
@@ -119,7 +107,7 @@ class Simulation:
         self._profile = False
         self._log_verbosity = log_verbosity
         self._max_cores = max_cores
-        self._task = SimulationTask()
+        self._task = SimulationTask(0)
         self._configure_logger()
         if settings is None:
             self._init_from_json(json_file_name)
@@ -134,7 +122,7 @@ class Simulation:
         self._settings = SimulationSettings(**loaded["simulation_settings"])
         self._state_count = loaded["state_count"]
         self._concept_ids = np.array(loaded["concept_ids"])
-        self._serious_concepts = np.array(loaded["serious_concepts"])
+        self._serious_concept_idx = np.array(loaded["serious_concept_idx"])
         self._initial_state_probabilities = np.array(loaded["initial_state_probabilities"])
         self._dynamic_state_entry_coefs = [np.array(matrix) for matrix in loaded["dynamic_state_entry_coefs"]]
         self._dynamic_state_exit_probabilities = np.array(loaded["dynamic_state_exit_probabilities"])
@@ -168,7 +156,10 @@ class Simulation:
             matrix[np.random.choice(len(matrix), size=non_zero_count, replace=False)] = \
                 np.random.laplace(loc=0, scale=0.5, size=non_zero_count)
             self._concept_emmision_coefs.append(matrix.reshape(self._state_count, self._state_count))
-        self._serious_concepts = np.random.choice(self._concept_ids, size=settings.serious_concept_count)
+        self._serious_concept_idx = np.zeros(settings.concept_count, dtype=bool)
+        self._serious_concept_idx[np.random.choice(settings.concept_count,
+                                                   size=settings.serious_concept_count,
+                                                   replace=False)] = True
 
     def set_profile(self, profile: bool):
         self._profile = profile
@@ -195,8 +186,8 @@ class Simulation:
                                               observation_period_id=person_id,
                                               observation_period_start_date=start_date,
                                               observation_period_end_date=start_date + self._settings.days_to_simulate)
-        year_of_birth, month_of_birth, day_of_birth = _simulate_date_of_birth(start_date, state[-2])
-        gender_concept_id = 8507 if state[-1] == 0 else 8532
+        year_of_birth, month_of_birth, day_of_birth = _simulate_date_of_birth(start_date, state[AGE_INDEX])
+        gender_concept_id = 8507 if state[GENDER_INDEX] == 0 else 8532
         self._cdm_data.add_person(person_id=person_id,
                                   year_of_birth=year_of_birth,
                                   month_of_birth=month_of_birth,
@@ -207,37 +198,29 @@ class Simulation:
             if self._log_verbosity == OBSESSIVE:
                 logging.debug("Person: %s, Day: %s, State: %s", person_id, t, state)
             state_interaction_matrix = np.outer(state, state)
-            state_flip_probabilities = np.zeros(shape=self._settings.dynamic_state_count)
-            # Role dice to enter a dynamic state:
-            for i in range(self._settings.dynamic_state_count):
-                if state[i] == 1:
-                    continue
-                value = -6 + (state_interaction_matrix * self._dynamic_state_entry_coefs[i]).sum()
-                state_flip_probabilities[i] = logistic(value)
-            # Role dice to exit a dynamic state:
-            for i in range(self._settings.dynamic_state_count):
-                if state[i] == 0:
-                    continue
-                state_flip_probabilities[i] = self._dynamic_state_exit_probabilities[i]
+            # Roll dice to change state:
+            flip_to_one = logistic(
+                np.sum(np.asarray(self._dynamic_state_entry_coefs) * state_interaction_matrix[np.newaxis, :, :],
+                       axis=(1, 2)) - 6) * (state[:self._settings.dynamic_state_count] == 0)
+            flip_to_zero = (self._dynamic_state_exit_probabilities * (state[:self._settings.dynamic_state_count] == 1))
+            state_flip_probabilities = flip_to_one + flip_to_zero
             state[:self._settings.dynamic_state_count] = np.logical_xor(state[:self._settings.dynamic_state_count],
                                                                         np.random.binomial(n=1,
                                                                                            p=state_flip_probabilities))
-            # Role dice to observe a concept:
-            concept_probabilities = np.zeros(shape=self._settings.concept_count)
-            for i in range(self._settings.concept_count):
-                value = -8 + (state_interaction_matrix * self._concept_emmision_coefs[i]).sum()
-                concept_probabilities[i] = logistic(value)
-            admission_concepts = (np.random.binomial(n=1, p=concept_probabilities) != 0)
-            visit = sum(admission_concepts) > 0
+            # Roll dice to observe a concept:
+            concept_probabilities = logistic(CONCEPT_OBSERVATION_INTERCEPT + np.sum(
+                np.asarray(self._concept_emmision_coefs) * state_interaction_matrix[np.newaxis, :, :], axis=(1, 2)))
+            admission_concept_idx = (np.random.binomial(n=1, p=concept_probabilities) != 0)
+            visit = admission_concept_idx.any()
             if visit:
-                # Role dice again to observe a concept (to simulate the fact that some concepts are more likely to be
+                # Roll dice again to observe a concept (to simulate the fact that some concepts are more likely to be
                 # observed during a visit):
-                observed_concepts = admission_concepts | (np.random.binomial(n=self._settings.visit_multiplier,
-                                                                             p=concept_probabilities) != 0)
+                observed_concept_idx = admission_concept_idx | (np.random.binomial(n=self._settings.visit_multiplier,
+                                                                                   p=concept_probabilities) != 0)
                 if is_prediction and t > index_day:
-                    prediction_labels = prediction_labels | observed_concepts
+                    prediction_labels = prediction_labels | observed_concept_idx
                 else:
-                    concept_ids = self._concept_ids[observed_concepts != 0]
+                    concept_ids = self._concept_ids[observed_concept_idx]
                     for concept_id in concept_ids:
                         self._cdm_data.add_condition_occurrence(person_id=person_id,
                                                                 condition_start_date=start_date + t,
@@ -245,7 +228,7 @@ class Simulation:
                                                                 visit_occurrence_id=visit_occurrence_id)
                     # If admission concept is serious, make the visit an emergency room visit, otherwise make it an
                     # outpatient visit:
-                    if np.in1d(self._concept_ids[admission_concepts != 0], self._serious_concepts).any():
+                    if (admission_concept_idx & self._serious_concept_idx).any():
                         visit_concept_id = 9203  # Emergency room visit
                     else:
                         visit_concept_id = 9201  # Outpatient visit
@@ -347,7 +330,7 @@ class Simulation:
                 "simulation_settings": self._settings.__dict__,
                 "state_count": self._state_count,
                 "concept_ids": self._concept_ids.tolist(),
-                "serious_concepts": self._serious_concepts.tolist(),
+                "serious_concept_idx": self._serious_concept_idx.tolist(),
                 "initial_state_probabilities": self._initial_state_probabilities.tolist(),
                 "dynamic_state_exit_probabilities": self._dynamic_state_exit_probabilities.tolist(),
                 "dynamic_state_entry_coefs": [matrix.tolist() for matrix in self._dynamic_state_entry_coefs],
@@ -358,7 +341,8 @@ class Simulation:
 
 def main(args: List[str]):
     config = configparser.ConfigParser()
-    config.read(args[0])
+    with open(args[0]) as file:  # Explicitly opening file so error is thrown when not found
+        config.read_file(file)
     if config["simulation"].get("json_file_name") == "":
         settings = SimulationSettings(
             dynamic_state_count=config["simulation"].getint("dynamic_state_count"),
@@ -372,25 +356,25 @@ def main(args: List[str]):
         settings = None
         json_file_name = config["simulation"].get("json_file_name")
         config.remove_section("simulation")
-    simulation = Simulation(root_folder=config["system"].get("root_folder"),
-                            settings=settings,
-                            json_file_name=json_file_name,
-                            log_verbosity=config["debug"].getint("log_verbosity"),
-                            max_cores=config["system"].getint("max_cores"))
+    simulator = Simulator(root_folder=config["system"].get("root_folder"),
+                          settings=settings,
+                          json_file_name=json_file_name,
+                          log_verbosity=config["debug"].getint("log_verbosity"),
+                          max_cores=config["system"].getint("max_cores"))
     # Log config after initializing cdm_data_processor so logger is initialized:
     logger.log_config(config)
     if config["debug"].getboolean("profile"):
-        simulation.set_profile(True)
+        simulator.set_profile(True)
     if config["pre-training data generation"].getboolean("generate_pre_training_data"):
         task = PreTrainingTask(partition_count=config["pre-training data generation"].getint("partition_count"),
                                person_count=config["pre-training data generation"].getint("person_count"))
-        simulation.simulate(task)
+        simulator.simulate(task)
     if config["prediction data generation"].getboolean("generate_prediction_data"):
         task = PredictionTask(partition_count=config["prediction data generation"].getint("partition_count"),
                               train_person_count=config["prediction data generation"].getint("train_person_count"),
                               test_person_count=config["prediction data generation"].getint("test_person_count"),
                               prediction_window=config["prediction data generation"].getint("prediction_window"))
-        simulation.simulate(task)
+        simulator.simulate(task)
 
 
 if __name__ == "__main__":

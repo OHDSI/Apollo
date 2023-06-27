@@ -204,7 +204,8 @@ class CehrBertCdmDataProcessor(AbstractCdmDataProcessor):
 
 def main(args: List[str]):
     config = configparser.ConfigParser()
-    config.read(args[0])
+    with open(args[0]) as file:  # Explicitly opening file so error is thrown when not found
+        config.read_file(file)
     cdm_data_processor = CehrBertCdmDataProcessor(
         cdm_data_path=config["system"].get("cdm_data_path"),
         max_cores=config["system"].getint("max_cores"),

@@ -34,7 +34,16 @@ class TestCdmProcessorUtils(unittest.TestCase):
                 "month_of_birth": [5],
                 "day_of_birth": [7],
                 "gender_concept_id": [8507],
-            }
+            },
+            schema=pa.schema(
+                [
+                    ("person_id", pa.int64()),
+                    ("year_of_birth", pa.int32()),
+                    ("month_of_birth", pa.int32()),
+                    ("day_of_birth", pa.int32()),
+                    ("gender_concept_id", pa.int32()),
+                ]
+            )
         )
         observation_period = pa.Table.from_pydict(
             {
@@ -42,7 +51,15 @@ class TestCdmProcessorUtils(unittest.TestCase):
                 "observation_period_id": [1, 2, 3],
                 "observation_period_start_date": d(["2000-01-01", "2001-01-01", "2002-01-01"]),
                 "observation_period_end_date": d(["2000-07-01", "2001-07-01", "2002-07-01"]),
-            }
+            },
+            schema=pa.schema(
+                [
+                    ("person_id", pa.int64()),
+                    ("observation_period_id", pa.int64()),
+                    ("observation_period_start_date", pa.date32()),
+                    ("observation_period_end_date", pa.date32()),
+                ]
+            )
         )
         visit_occurrence = pa.Table.from_pydict(
             {
@@ -51,7 +68,16 @@ class TestCdmProcessorUtils(unittest.TestCase):
                 "visit_concept_id": [9201, 9202, 9201],
                 "visit_start_date": d(["2000-01-01", "2000-02-01", "2002-07-01"]),
                 "visit_end_date": d(["2000-01-01", "2000-02-05", "2002-07-01"]),
-            }
+            },
+            schema=pa.schema(
+                [
+                    ("person_id", pa.int64()),
+                    ("visit_occurrence_id", pa.int64()),
+                    ("visit_concept_id", pa.int32()),
+                    ("visit_start_date", pa.date32()),
+                    ("visit_end_date", pa.date32()),
+                ]
+            )
         )
         condition_occurrence = pa.Table.from_pydict(
             {
@@ -60,13 +86,28 @@ class TestCdmProcessorUtils(unittest.TestCase):
                 "condition_start_date": d(["2000-01-01", "2000-02-01", "2000-03-01"]),
                 "condition_end_date": d(["2000-01-01", "2000-02-01", "2000-03-01"]),
                 "visit_occurrence_id": [1, None, None],
-            }
+            },
+            schema=pa.schema(
+                [
+                    ("person_id", pa.int64()),
+                    ("condition_concept_id", pa.int32()),
+                    ("condition_start_date", pa.date32()),
+                    ("condition_end_date", pa.date32()),
+                    ("visit_occurrence_id", pa.int64()),
+                ]
+            )
         )
         death = pa.Table.from_pydict(
             {
                 "person_id": [1],
                 "death_date": d(["2020-07-01"]),
-            }
+            },
+            schema=pa.schema(
+                [
+                    ("person_id", pa.int64()),
+                    ("death_date", pa.date32()),
+                ]
+            )
         )
         self.cdm_tables = {"person": person,
                            "observation_period": observation_period,

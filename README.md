@@ -30,12 +30,12 @@ pip install -r requirements.txt
 In real-world applications, the CDM data can be retrieved from a database using the [GeneralPretrainedModelTools R package](https://github.com/OHDSI/GeneralPretrainedModelTools). 
 For testing purposes, we can simulate CDM data using a built-in simulator:
 
-1. Edit simulation.ini so the `root_folder` argument points to a folder on the local file system.
+1. Edit simulator.ini so the `root_folder` argument points to a folder on the local file system.
 
 2. Run:
 
     ```python
-	python simulation/simulation.py simulation.ini
+	python simulating/simulator.py simulator.ini
 	```
    
 By default, the simulation script will generate pretraining data in a subfolder called 'pretraining'. 
