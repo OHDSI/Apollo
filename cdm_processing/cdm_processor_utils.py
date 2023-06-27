@@ -95,7 +95,7 @@ def union_domain_tables(cdm_tables: Dict[str, pa.Table]) -> pa.Table:
             [PERSON_ID, START_DATE]
         ).append_column(
             CONCEPT_ID,
-            pa.array([DEATH_CONCEPT_ID_VALUE] * len(death), pa.int64())
+            pa.array([DEATH_CONCEPT_ID_VALUE] * len(death), pa.int32())
         ).append_column(
             VISIT_OCCURRENCE_ID,
             pa.nulls(len(death), pa.int64())
