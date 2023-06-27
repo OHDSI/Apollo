@@ -330,7 +330,7 @@ class Simulator:
                 "simulation_settings": self._settings.__dict__,
                 "state_count": self._state_count,
                 "concept_ids": self._concept_ids.tolist(),
-                "serious_concepts": self._serious_concept_idx.tolist(),
+                "serious_concept_idx": self._serious_concept_idx.tolist(),
                 "initial_state_probabilities": self._initial_state_probabilities.tolist(),
                 "dynamic_state_exit_probabilities": self._dynamic_state_exit_probabilities.tolist(),
                 "dynamic_state_entry_coefs": [matrix.tolist() for matrix in self._dynamic_state_entry_coefs],
