@@ -174,12 +174,13 @@ class CehrBertCdmDataProcessor(AbstractCdmDataProcessor):
         Process a single partition of CDM data, and save the result to disk.
         """
         cdm_tables["person"] = cdm_utils.add_date_of_birth(cdm_tables["person"])
-        cdm_tables["drug_exposure"] = cdm_utils.map_concepts(cdm_table=cdm_tables["drug_exposure"],
-                                                             concept_id_field="drug_concept_id",
-                                                             mapping=self._drug_mapping)
+        if self._map_drugs_to_ingredients:
+            cdm_tables["drug_exposure"] = cdm_utils.map_concepts(cdm_table=cdm_tables["drug_exposure"],
+                                                                 concept_id_field="drug_concept_id",
+                                                                 mapping=self._drug_mapping)
         event_table = cdm_utils.union_domain_tables(cdm_tables)
         event_table, removed_concepts = cdm_utils.remove_concepts(event_table=event_table,
-                                                                  concept_ids=[0, 900000010])
+                                                                  concept_ids=self._concepts_to_remove)
         event_table, removed_duplicates = cdm_utils.remove_duplicates(event_table=event_table)
         event_table, visit_occurrence, mapping_stats = cdm_utils.link_events_to_visits(event_table=event_table,
                                                                                        visit_occurrence=cdm_tables[
@@ -203,7 +204,8 @@ class CehrBertCdmDataProcessor(AbstractCdmDataProcessor):
 
 def main(args: List[str]):
     config = configparser.ConfigParser()
-    config.read(args[0])
+    with open(args[0]) as file:  # Explicitly opening file so error is thrown when not found
+        config.read_file(file)
     cdm_data_processor = CehrBertCdmDataProcessor(
         cdm_data_path=config["system"].get("cdm_data_path"),
         max_cores=config["system"].getint("max_cores"),
