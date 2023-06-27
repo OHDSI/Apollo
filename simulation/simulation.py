@@ -1,5 +1,5 @@
 """
-Simulate CDM data for testing purposes. Persons are simulated to have hidden disease states. Some states are fixes at
+Simulate CDM data for testing purposes. Persons are simulated to have hidden disease states. Some states are fixed at
 the start, to simulate fixed traits such as genetics, while the remaining states are dynamic. The probability to enter
 a dynamic disease state depending on the current disease states in a non-linear way (i.e. using interactions between
 states). Concepts are simulated to be observed with probabilities depending on the current disease states, again in a
@@ -208,13 +208,13 @@ class Simulation:
                 logging.debug("Person: %s, Day: %s, State: %s", person_id, t, state)
             state_interaction_matrix = np.outer(state, state)
             state_flip_probabilities = np.zeros(shape=self._settings.dynamic_state_count)
-            # Role dice to enter a dynamic state:
+            # Roll dice to enter a dynamic state:
             for i in range(self._settings.dynamic_state_count):
                 if state[i] == 1:
                     continue
                 value = -6 + (state_interaction_matrix * self._dynamic_state_entry_coefs[i]).sum()
                 state_flip_probabilities[i] = logistic(value)
-            # Role dice to exit a dynamic state:
+            # Roll dice to exit a dynamic state:
             for i in range(self._settings.dynamic_state_count):
                 if state[i] == 0:
                     continue
@@ -237,7 +237,7 @@ class Simulation:
                 if is_prediction and t > index_day:
                     prediction_labels = prediction_labels | observed_concepts
                 else:
-                    concept_ids = self._concept_ids[observed_concepts != 0]
+                    concept_ids = self._concept_ids[observed_concepts]
                     for concept_id in concept_ids:
                         self._cdm_data.add_condition_occurrence(person_id=person_id,
                                                                 condition_start_date=start_date + t,
