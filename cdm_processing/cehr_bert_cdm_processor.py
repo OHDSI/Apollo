@@ -4,7 +4,9 @@ from typing import Dict, List
 import logging
 import configparser
 
+import numpy as np
 import duckdb
+import h5py
 import pyarrow as pa
 import pyarrow.parquet as pq
 
@@ -47,7 +49,7 @@ def _create_cehr_bert_tables(cdm_tables: Dict[str, pa.Table], event_table: pa.Ta
           "    WHEN days < 28 THEN 'W' || CAST(CAST(FLOOR(days / 7) AS INT) AS VARCHAR) " \
           "    WHEN days < 360 THEN 'M' || CAST(CAST(FLOOR(days / 30) AS INT) AS VARCHAR) " \
           "    ELSE 'LT' " \
-          "  END AS concept_ids, " \
+          "  END AS tokens, " \
           "  0 AS visit_segments, " \
           "  0 AS dates, " \
           " -1 AS ages, " \
@@ -66,7 +68,7 @@ def _create_cehr_bert_tables(cdm_tables: Dict[str, pa.Table], event_table: pa.Ta
           ") intervals"
     con.execute(sql)
     sql = "CREATE TABLE start_tokens AS " \
-          "SELECT 'VS' AS concept_ids, " \
+          "SELECT 'VS' AS tokens, " \
           "  visit_rank % 2 + 1 AS visit_segments, " \
           "  DATE_DIFF('week', DATE '1970-01-01', visit_start_date) AS dates, " \
           "  DATE_DIFF('month', date_of_birth, visit_start_date) AS ages, " \
@@ -80,7 +82,7 @@ def _create_cehr_bert_tables(cdm_tables: Dict[str, pa.Table], event_table: pa.Ta
           "  ON visits.person_id = person.person_id"
     con.execute(sql)
     sql = "CREATE TABLE event_tokens AS " \
-          "SELECT CAST(concept_id AS VARCHAR) AS concept_ids, " \
+          "SELECT CAST(concept_id AS VARCHAR) AS tokens, " \
           "  visit_rank % 2 + 1 AS visit_segments, " \
           "  DATE_DIFF('week', DATE '1970-01-01', start_date) AS dates, " \
           "  DATE_DIFF('month', date_of_birth,start_date) AS ages, " \
@@ -96,7 +98,7 @@ def _create_cehr_bert_tables(cdm_tables: Dict[str, pa.Table], event_table: pa.Ta
           "  ON visits.person_id = person.person_id"
     con.execute(sql)
     sql = "CREATE TABLE end_tokens AS " \
-          "SELECT 'VE' AS concept_ids, " \
+          "SELECT 'VE' AS tokens, " \
           "  visit_rank % 2 + 1 AS visit_segments, " \
           "  DATE_DIFF('week', DATE '1970-01-01', visit_end_date) AS dates, " \
           "  DATE_DIFF('month', date_of_birth, visit_end_date) AS ages, " \
@@ -131,18 +133,18 @@ def _create_cehr_bert_tables(cdm_tables: Dict[str, pa.Table], event_table: pa.Ta
     duckdb.close(con)
     cehr_bert_input = union_tokens.group_by("observation_period_id").aggregate([
         ("person_id", "max"),
-        ("concept_ids", "list"),
+        ("tokens", "list"),
         ("visit_segments", "list"),
         ("dates", "list"),
         ("ages", "list"),
         ("visit_concept_orders", "list"),
         ("visit_concept_ids", "list"),
         ("orders", "list"),
-        ("concept_ids", "count"),
+        ("tokens", "count"),
         ("visit_concept_orders", "max")]).rename_columns(
         ["observation_period_id",
          "person_id",
-         "concept_ids",
+         "tokens",
          "visit_segments",
          "dates",
          "ages",
@@ -152,6 +154,26 @@ def _create_cehr_bert_tables(cdm_tables: Dict[str, pa.Table], event_table: pa.Ta
          "num_of_concepts",
          "num_of_visits"])
     return cehr_bert_input
+
+
+def write_table_to_hdf5(table : pa.Table, output_file: str) -> None:
+    with h5py.File(output_file, "w") as f:
+        # for column in table.columns:
+        for i in range(table.num_columns):
+            column = table.column(i)
+            column_name = table.column_names[i]
+            if pa.types.is_list(column.type):
+                group = f.create_group(column_name)
+                for i, entry in enumerate(column):
+                    if pa.types.is_large_string(entry.type.value_type):
+                        array = np.array(entry, dtype='S')
+                    else:
+                        array = np.array(entry.values)
+                    group.create_dataset(str(i), data=array, compression="gzip")
+            else:
+                f.create_dataset(column_name, data=column.to_numpy(), compression="gzip")
+
+
 
 
 class CehrBertCdmDataProcessor(AbstractCdmDataProcessor):
@@ -168,6 +190,7 @@ class CehrBertCdmDataProcessor(AbstractCdmDataProcessor):
         self._concepts_to_remove = concepts_to_remove
         if self._map_drugs_to_ingredients:
             self._drug_mapping = cdm_utils.load_mapping_to_ingredients(self._cdm_data_path)
+
 
     def _process_parition_cdm_data(self, cdm_tables: Dict[str, pa.Table], partition_i: int):
         """
@@ -188,8 +211,8 @@ class CehrBertCdmDataProcessor(AbstractCdmDataProcessor):
                                                                                        mising_visit_concept_id=1)
         cdm_tables["visit_occurrence"] = visit_occurrence
         cehr_bert_input = _create_cehr_bert_tables(cdm_tables=cdm_tables, event_table=event_table)
-        file_name = "part{:04d}.parquet".format(partition_i + 1)
-        pq.write_table(cehr_bert_input, os.path.join(self._output_path, file_name))
+        file_name = "part{:04d}.h5".format(partition_i + 1)
+        write_table_to_hdf5(cehr_bert_input, os.path.join(self._output_path, file_name))
 
         logging.debug("Partition %s persons: %s", partition_i, len(cdm_tables["person"]))
         logging.debug("Partition %s observation periods: %s", partition_i, len(cdm_tables["observation_period"]))
