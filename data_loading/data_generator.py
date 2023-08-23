@@ -5,9 +5,9 @@ from typing import Iterator, Dict
 import numpy as np
 import pandas as pd
 
-from data_generating.abstract_data_generator import AbstractDataGenerator
-from data_generating.learning_objective import LearningObjective
-from data_generating.parquet_data_iterator import ParquetDataIterator
+from data_loading.abstract_data_generator import AbstractDataGenerator
+from data_loading.learning_objective import LearningObjective
+from data_loading.parquet_data_iterator import ParquetDataIterator
 
 
 SEQUENCE_LENGTH_COLUMN_NAME = "num_of_concepts"

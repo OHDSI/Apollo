@@ -2,95 +2,144 @@ import configparser
 import logging
 import os
 import sys
+import time
 from typing import List
 
 import torch
+from torch import nn, optim
+from torch.utils.data import DataLoader
 
 import utils.logger as logger
-import data_generating.data_generator as data_generator
-import data_generating.learning_objective as learning_objective
+from training.train_settings import CehrBertSettings
+from data_loading.dataset import ApolloDataset
+from data_loading.data_transformer import ApolloDataTransformer
+import data_loading.learning_objective as learning_objective
+import data_loading.tokenizer as tokenizer
+from data_loading.variable_names import DataNames, ModelInputNames
+from model.model import TransformerModel
+
+# Inspired by https://pytorch.org/tutorials/beginner/transformer_tutorial.html
 
 LOGGER_FILE_NAME = "_model_training_log.txt"
-
-
-class _CehrBertSettings:
-    def __init__(self,
-                 batch_size: int,
-                 min_sequence_length: int,
-                 max_sequence_length: int,
-                 masked_language_model_learning_objective: bool,
-                 visit_prediction_learning_objective: bool,
-                 is_training: bool = True):
-        self.batch_size = batch_size
-        self.min_sequence_length = min_sequence_length
-        self.max_sequence_length = max_sequence_length
-        self.masked_language_model_learning_objective = masked_language_model_learning_objective
-        self.visit_prediction_learning_objective = visit_prediction_learning_objective
-        self.is_training = is_training
+IGNORE_INDEX = -1
 
 
 class CehrBertTrainer:
 
     def __init__(self,
-                 sequence_data_folder: str,
-                 output_folder: str,
-                 cehr_bert_settings: _CehrBertSettings):
-        self._sequence_data_folder = sequence_data_folder
-        self._output_folder = output_folder
-        os.makedirs(output_folder, exist_ok=True)
+                 settings: CehrBertSettings):
+        self._settings = settings
+        os.makedirs(settings.output_folder, exist_ok=True)
         self._configure_logger()
-        self._cehr_bert_training_settings = cehr_bert_settings
-        learning_objectives = []
-        if cehr_bert_settings.masked_language_model_learning_objective:
-            learning_objectives.append(learning_objective.MaskedLanguageModelLearningObjective(
-                work_folder=output_folder,
-                reuse_tokenizer=True))
-        if cehr_bert_settings.visit_prediction_learning_objective:
-            learning_objectives.append(learning_objective.VisitPredictionLearningObjective(
-                work_folder=output_folder,
-                reuse_tokenizer=True))
-        self._data_generator = data_generator.DataGenerator(
-            training_data_path=sequence_data_folder,
-            batch_size=cehr_bert_settings.batch_size,
-            min_sequence_length=cehr_bert_settings.min_sequence_length,
-            max_sequence_length=cehr_bert_settings.max_sequence_length,
-            is_training=cehr_bert_settings.is_training,
-            learning_objectives=learning_objectives)
+        self._concept_tokenizer = self._get_concept_tokenizer()
+        self._train_data, self._test_data = self._get_data_sets()
+        self._criterion = nn.CrossEntropyLoss(ignore_index=IGNORE_INDEX)
+        self._model = TransformerModel(settings=self._settings, tokenizer=self._concept_tokenizer)
+        self._optimizer = optim.Adam(self._model.parameters(), lr=0.001)
 
-    def _configure_logger(self):
-        logger.create_logger(os.path.join(self._output_folder, LOGGER_FILE_NAME))
+    def _configure_logger(self) -> None:
+        logger.create_logger(os.path.join(self._settings.output_folder, LOGGER_FILE_NAME))
 
-    def train_model(self):
+    def _get_concept_tokenizer(self) -> tokenizer.ConceptTokenizer:
+        json_file = os.path.join(self._settings.output_folder, "_concept_tokenizer.json")
+        if os.path.exists(json_file):
+            logging.info("Loading concept tokenizer from %s", json_file)
+            concept_tokenizer = tokenizer.load_from_json(json_file)
+        else:
+            logging.info("Creating concept tokenizer")
+            concept_tokenizer = tokenizer.ConceptTokenizer()
+            train_data = ApolloDataset(self._settings.sequence_data_folder, is_train=True)
+            concept_tokenizer.fit_on_concept_sequences(train_data, DataNames.CONCEPT_IDS)
+            concept_tokenizer.save_to_json(json_file)
+        return concept_tokenizer
+
+    def _get_data_sets(self) -> (ApolloDataset, ApolloDataset):
+        mlm_objective = learning_objective.MaskedLanguageModelLearningObjective(self._concept_tokenizer)
+        learning_objectives = [mlm_objective]
+        data_transformer = ApolloDataTransformer(learning_objectives=learning_objectives,
+                                                 max_sequence_length=self._settings.max_sequence_length)
+        train_data = ApolloDataset(folder=self._settings.sequence_data_folder,
+                                   data_transformer=data_transformer,
+                                   is_train=True)
+        test_data = ApolloDataset(folder=self._settings.sequence_data_folder,
+                                  data_transformer=data_transformer,
+                                  is_train=True)
+        return train_data, test_data
+
+    def _train(self) -> None:
+        self._model.train()
+        total_lml_loss = 0.
+        batch_count = 0
+
+        _data_loader = DataLoader(self._train_data, batch_size=self._settings.batch_size)
+        for inputs, outputs in _data_loader:
+            self._optimizer.zero_grad()
+            token_predictions = self._model(inputs)
+
+            # Compute masked language model loss:
+            token_ids = outputs[ModelInputNames.TOKEN_IDS]
+            token_ids = token_ids.masked_fill(outputs[ModelInputNames.MASKED_TOKEN_MASK], IGNORE_INDEX)
+            loss_token = self._criterion(token_predictions.transpose(1, 2), token_ids)
+
+            loss = loss_token  # + loss_nsp
+            logging.info("Loss: %s", loss.tolist())
+            total_lml_loss += loss_token
+            batch_count += 1
+
+            # Backpropagation:
+            loss.backward()
+            self._optimizer.step()
+        logging.info("Mean LML loss: %s", total_lml_loss / batch_count)
+
+    # def evaluate(model: nn.Module, eval_data: Tensor) -> float:
+    #     model.eval()  # turn on evaluation mode
+    #     total_loss = 0.
+    #     with torch.no_grad():
+    #         for i in range(0, eval_data.size(0) - 1, bptt):
+    #             data, targets = get_batch(eval_data, i)
+    #             seq_len = data.size(0)
+    #             output = model(data)
+    #             output_flat = output.view(-1, ntokens)
+    #             total_loss += seq_len * criterion(output_flat, targets).item()
+    #     return total_loss / (len(eval_data) - 1)
+
+    def train_model(self) -> None:
         logging.info("CUDA available: %s", torch.cuda.is_available())
-        for batch in self._data_generator.generator():
-            print("Input: masked_token_ids:")
-            print(batch.get_inputs()["masked_token_ids"][0])
-            print("Input: mask:")
-            print(batch.get_inputs()["mask"][0])
 
-            print("Output: token_ids:")
-            print(batch.get_outputs()["token_ids"][0])
-            print("Output: mask:")
-            print(batch.get_outputs()["mask"][0])
-            # Torch magic happens here
-            break
+        for epoch in range(1, self._settings.num_epochs + 1):
+            # epoch_start_time = time.time()
+            self._train()
+            # val_loss = evaluate(model, val_data)
+            # val_ppl = math.exp(val_loss)
+            # elapsed = time.time() - epoch_start_time
+            # print('-' * 89)
+            # print(f'| end of epoch {epoch:3d} | time: {elapsed:5.2f}s | '
+            #       f'valid loss {val_loss:5.2f} | valid ppl {val_ppl:8.2f}')
+            # print('-' * 89)
+
+            # if val_loss < best_val_loss:
+            #     best_val_loss = val_loss
+            #     torch.save(model.state_dict(), best_model_params_path)
+            #
+            # scheduler.step()
 
 
 def main(args: List[str]):
     config = configparser.ConfigParser()
-    config.read(args[0])
-    cehr_bert_settings = _CehrBertSettings(
-        batch_size=config.getint("cehr-bert parameters", "batch_size"),
-        min_sequence_length=config.getint("cehr-bert parameters", "min_sequence_length"),
-        max_sequence_length=config.getint("cehr-bert parameters", "max_sequence_length"),
-        masked_language_model_learning_objective=config.getboolean("cehr-bert parameters",
+    with open(args[0]) as file:  # Explicitly opening file so error is thrown when not found
+        config.read_file(file)
+    cehr_bert_settings = CehrBertSettings(
+        sequence_data_folder=config.get("system", "sequence_data_folder"),
+        output_folder=config.get("system", "output_folder"),
+        batch_size=config.getint("data preparation", "batch_size"),
+        min_sequence_length=config.getint("data preparation", "min_sequence_length"),
+        max_sequence_length=config.getint("data preparation", "max_sequence_length"),
+        masked_language_model_learning_objective=config.getboolean("data preparation",
                                                                    "masked_language_model_learning_objective"),
-        visit_prediction_learning_objective=config.getboolean("cehr-bert parameters",
+        visit_prediction_learning_objective=config.getboolean("data preparation",
                                                               "visit_prediction_learning_objective"),
-        is_training=config.getboolean("cehr-bert parameters", "is_training"))
-    cehr_bert_trainer = CehrBertTrainer(sequence_data_folder=config.get("system", "sequence_data_folder"),
-                                        output_folder=config.get("system", "output_folder"),
-                                        cehr_bert_settings=cehr_bert_settings)
+        is_training=config.getboolean("data preparation", "is_training"))
+    cehr_bert_trainer = CehrBertTrainer(settings=cehr_bert_settings)
     # Log config after initializing cehr_bert_trainer so logger is initialized:
     logger.log_config(config)
     cehr_bert_trainer.train_model()
