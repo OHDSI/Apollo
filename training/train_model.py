@@ -3,7 +3,7 @@ import logging
 import os
 import sys
 import time
-from typing import List
+from typing import List, Dict
 
 import torch
 from torch import nn, optim
@@ -24,7 +24,13 @@ from model.model import TransformerModel
 
 LOGGER_FILE_NAME = "_model_training_log.txt"
 IGNORE_INDEX = -1
+BATCH_REPORT_INTERVAL = 10
 
+
+def _dict_to_device(dict: Dict[str, torch.Tensor], device: torch.device) -> Dict[str, torch.Tensor]:
+    for key, value in dict.items():
+        dict[key] = value.to(device)
+    return dict
 
 class ModelTrainer:
 
@@ -37,8 +43,10 @@ class ModelTrainer:
         self._concept_tokenizer = self._get_concept_tokenizer()
         self._train_data, self._test_data = self._get_data_sets()
         self._criterion = nn.CrossEntropyLoss(ignore_index=IGNORE_INDEX)
+        self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self._model = TransformerModel(settings=self._settings, tokenizer=self._concept_tokenizer)
-        self._print_model()
+
+        self._model.to(self._device)
         self._optimizer = optim.Adam(params=self._model.parameters(),
                                      lr=settings.learning_rate,
                                      weight_decay=settings.weight_decay)
@@ -76,10 +84,15 @@ class ModelTrainer:
     def _train(self) -> None:
         self._model.train()
         total_lml_loss = 0.
-        batch_count = 0
-
-        _data_loader = DataLoader(self._train_data, batch_size=self._settings.batch_size)
+        batch_count = 1
+        epoch_start_time = time.time()
+        start_time = epoch_start_time
+        _data_loader = DataLoader(dataset=self._train_data,
+                                  batch_size=self._settings.batch_size,
+                                  num_workers=4)
         for inputs, outputs in _data_loader:
+            inputs = _dict_to_device(inputs, self._device)
+            outputs = _dict_to_device(outputs, self._device)
             token_predictions = self._model(inputs)
             # This currently throws an error. May work on GPU:
             # if self._epoch == 1 and batch_count == 0:
@@ -92,9 +105,9 @@ class ModelTrainer:
             loss_token = self._criterion(token_predictions.transpose(1, 2), token_ids)
 
             loss = loss_token  # + loss_nsp
-            batch_count += 1
-            logging.info("Batch %d, Loss: %0.2f", batch_count, loss.tolist())
             total_lml_loss += loss.tolist()
+            logging.info("Batch %d, Loss: %0.2f", batch_count, loss.tolist())
+
             self._writer.add_scalar('training loss',
                                     loss,
                                     self._epoch * 1000 + batch_count)
@@ -104,6 +117,12 @@ class ModelTrainer:
             self._optimizer.zero_grad()
             loss.backward()
             self._optimizer.step()
+
+            batch_count += 1
+            if batch_count % BATCH_REPORT_INTERVAL == 0:
+                elapsed = time.time() - start_time
+                logging.info("Elapsed time: %s", elapsed)
+                start_time = time.time()
 
         logging.info("Mean LML loss: %s", total_lml_loss / batch_count)
         print("Done")
@@ -122,8 +141,8 @@ class ModelTrainer:
     #     return total_loss / (len(eval_data) - 1)
 
     def train_model(self) -> None:
-        logging.info("CUDA available: %s", torch.cuda.is_available())
-
+        logging.info("Performing computations on device: %s", self._device.type)
+        logging.info("Total parameters: {:,} ".format(sum([param.nelement() for param in self._model.parameters()])))
         for self._epoch in range(1, self._settings.num_epochs + 1):
             # epoch_start_time = time.time()
             self._train()
@@ -149,12 +168,6 @@ class ModelTrainer:
             # 'loss': loss,
         }, file_name)
 
-    def _print_model(self):
-        print(self._model)
-        total_params = sum([param.nelement() for param in self._model.parameters()])
-        print("Total Params: {:,} ".format(total_params))
-
-
 def main(args: List[str]):
     config = configparser.ConfigParser()
     with open(args[0]) as file:  # Explicitly opening file so error is thrown when not found
@@ -170,10 +183,10 @@ def main(args: List[str]):
         visit_prediction_learning_objective=config.getboolean("data preparation",
                                                               "visit_prediction_learning_objective"),
         is_training=config.getboolean("data preparation", "is_training"))
-    cehr_bert_trainer = ModelTrainer(settings=cehr_bert_settings)
-    # Log config after initializing cehr_bert_trainer so logger is initialized:
+    model_trainer = ModelTrainer(settings=cehr_bert_settings)
+    # Log config after initializing model_trainer so logger is initialized:
     logger.log_config(config)
-    cehr_bert_trainer.train_model()
+    model_trainer.train_model()
 
 
 if __name__ == "__main__":
