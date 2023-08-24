@@ -3,7 +3,7 @@ import logging
 import os
 import sys
 import time
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 import torch
 from torch import nn, optim
@@ -84,13 +84,15 @@ class ModelTrainer:
     def _train(self) -> None:
         self._model.train()
         total_lml_loss = 0.
-        batch_count = 1
+        batch_count = 0
         epoch_start_time = time.time()
         start_time = epoch_start_time
         _data_loader = DataLoader(dataset=self._train_data,
                                   batch_size=self._settings.batch_size,
                                   num_workers=4)
         for inputs, outputs in _data_loader:
+            batch_count += 1
+
             inputs = _dict_to_device(inputs, self._device)
             outputs = _dict_to_device(outputs, self._device)
             token_predictions = self._model(inputs)
@@ -108,7 +110,7 @@ class ModelTrainer:
             total_lml_loss += loss.tolist()
             logging.info("Batch %d, Loss: %0.2f", batch_count, loss.tolist())
 
-            self._writer.add_scalar('training loss',
+            self._writer.add_scalar('Per-batch training loss',
                                     loss,
                                     self._epoch * 1000 + batch_count)
             self._writer.flush()
@@ -118,49 +120,57 @@ class ModelTrainer:
             loss.backward()
             self._optimizer.step()
 
-            batch_count += 1
             if batch_count % BATCH_REPORT_INTERVAL == 0:
                 elapsed = time.time() - start_time
                 logging.info("Elapsed time: %s", elapsed)
                 start_time = time.time()
 
-        logging.info("Mean LML loss: %s", total_lml_loss / batch_count)
-        print("Done")
-        self._save_checkpoint()
+        logging.info("Mean LML loss training set: %s", total_lml_loss / batch_count)
+        self._writer.add_scalar('Mean LML loss training set',
+                                total_lml_loss / batch_count,
+                                self._epoch)
 
-    # def evaluate(model: nn.Module, eval_data: Tensor) -> float:
-    #     model.eval()  # turn on evaluation mode
-    #     total_loss = 0.
-    #     with torch.no_grad():
-    #         for i in range(0, eval_data.size(0) - 1, bptt):
-    #             data, targets = get_batch(eval_data, i)
-    #             seq_len = data.size(0)
-    #             output = model(data)
-    #             output_flat = output.view(-1, ntokens)
-    #             total_loss += seq_len * criterion(output_flat, targets).item()
-    #     return total_loss / (len(eval_data) - 1)
+    def _evaluate(self) -> None:
+        self._model.eval()  # turn on evaluation mode
+        total_lml_loss = 0.
+        batch_count = 0
+        _data_loader = DataLoader(dataset=self._test_data,
+                                  batch_size=self._settings.batch_size,
+                                  num_workers=4)
+        with torch.no_grad():
+            for inputs, outputs in _data_loader:
+                batch_count += 1
+
+                inputs = _dict_to_device(inputs, self._device)
+                outputs = _dict_to_device(outputs, self._device)
+                token_predictions = self._model(inputs)
+
+                # Compute masked language model loss:
+                token_ids = outputs[ModelInputNames.TOKEN_IDS]
+                token_ids = token_ids.masked_fill(outputs[ModelInputNames.MASKED_TOKEN_MASK], IGNORE_INDEX)
+                loss_token = self._criterion(token_predictions.transpose(1, 2), token_ids)
+
+                loss = loss_token  # + loss_nsp
+                total_lml_loss += loss.tolist()
+
+        logging.info("Mean LML loss test set: %s", total_lml_loss / batch_count)
+        self._writer.add_scalar('Mean LML loss test set',
+                                total_lml_loss / batch_count,
+                                self._epoch)
 
     def train_model(self) -> None:
         logging.info("Performing computations on device: %s", self._device.type)
         logging.info("Total parameters: {:,} ".format(sum([param.nelement() for param in self._model.parameters()])))
-        for self._epoch in range(1, self._settings.num_epochs + 1):
-            # epoch_start_time = time.time()
+        self._load_checkpoint()
+        start = self._epoch
+        for self._epoch in range(start, self._settings.num_epochs + 1):
+            logging.info("Starting epoch %d", self._epoch)
             self._train()
-            # val_loss = evaluate(model, val_data)
-            # val_ppl = math.exp(val_loss)
-            # elapsed = time.time() - epoch_start_time
-            # print('-' * 89)
-            # print(f'| end of epoch {epoch:3d} | time: {elapsed:5.2f}s | '
-            #       f'valid loss {val_loss:5.2f} | valid ppl {val_ppl:8.2f}')
-            # print('-' * 89)
+            self._evaluate()
+            self._save_checkpoint()
 
-            # if val_loss < best_val_loss:
-            #     best_val_loss = val_loss
-            #     torch.save(model.state_dict(), best_model_params_path)
-            #
-            # scheduler.step()
     def _save_checkpoint(self):
-        file_name = os.path.join(self._settings.output_folder, f"checkpoint_{self._epoch}.pth")
+        file_name = os.path.join(self._settings.output_folder, f"checkpoint_{self._epoch:03d}.pth")
         torch.save({
             'epoch': self._epoch,
             'model_state_dict': self._model.state_dict(),
@@ -168,11 +178,31 @@ class ModelTrainer:
             # 'loss': loss,
         }, file_name)
 
+    def _load_checkpoint(self, epoch: Optional[int] = None) -> None:
+        if epoch is None:
+            epoch = 0
+            with os.scandir(self._settings.output_folder) as entries:
+                for entry in entries:
+                    if entry.is_file() and entry.name.endswith(".pth"):
+                        new_epoch = int(entry.name[-7:-4])
+                        if new_epoch > epoch:
+                            epoch = new_epoch
+        if epoch == 0:
+            logging.info("No checkpoint found, starting with clean model")
+        else:
+            file_name = os.path.join(self._settings.output_folder, f"checkpoint_{epoch:03d}.pth")
+            logging.info("Loading model from '%s'", file_name)
+            loaded = torch.load(file_name)
+            self._epoch = loaded["epoch"] + 1
+            self._model.load_state_dict(loaded["model_state_dict"])
+            self._optimizer.load_state_dict(loaded["optimizer_state_dict"])
+
+
 def main(args: List[str]):
     config = configparser.ConfigParser()
     with open(args[0]) as file:  # Explicitly opening file so error is thrown when not found
         config.read_file(file)
-    cehr_bert_settings = TrainingSettings(
+    training_settings = TrainingSettings(
         sequence_data_folder=config.get("system", "sequence_data_folder"),
         output_folder=config.get("system", "output_folder"),
         batch_size=config.getint("data preparation", "batch_size"),
@@ -183,7 +213,7 @@ def main(args: List[str]):
         visit_prediction_learning_objective=config.getboolean("data preparation",
                                                               "visit_prediction_learning_objective"),
         is_training=config.getboolean("data preparation", "is_training"))
-    model_trainer = ModelTrainer(settings=cehr_bert_settings)
+    model_trainer = ModelTrainer(settings=training_settings)
     # Log config after initializing model_trainer so logger is initialized:
     logger.log_config(config)
     model_trainer.train_model()
