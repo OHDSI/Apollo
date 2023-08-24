@@ -116,8 +116,8 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
 
         # Tokenize the concepts:
         token_ids = self._concept_tokenizer.encode(concept_ids)
-        # Normalize the visit_orders using the smallest visit_concept_orders:
-        visit_concept_orders = visit_concept_orders - min(visit_concept_orders)
+        # Normalize the visit_orders using the smallest visit_concept_orders. Add 1 for CLS:
+        visit_concept_orders = visit_concept_orders - min(visit_concept_orders) + 1
         # Mask the tokens IDs:
         masked_token_ids, masked_token_mask = self._mask_tokens(token_ids)
 

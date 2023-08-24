@@ -162,7 +162,7 @@ class ModelTrainer:
         logging.info("Performing computations on device: %s", self._device.type)
         logging.info("Total parameters: {:,} ".format(sum([param.nelement() for param in self._model.parameters()])))
         self._load_checkpoint()
-        start = self._epoch
+        start = self._epoch + 1
         for self._epoch in range(start, self._settings.num_epochs + 1):
             logging.info("Starting epoch %d", self._epoch)
             self._train()
@@ -193,7 +193,7 @@ class ModelTrainer:
             file_name = os.path.join(self._settings.output_folder, f"checkpoint_{epoch:03d}.pth")
             logging.info("Loading model from '%s'", file_name)
             loaded = torch.load(file_name)
-            self._epoch = loaded["epoch"] + 1
+            self._epoch = loaded["epoch"]
             self._model.load_state_dict(loaded["model_state_dict"])
             self._optimizer.load_state_dict(loaded["optimizer_state_dict"])
 
