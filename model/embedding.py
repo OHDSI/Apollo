@@ -4,7 +4,7 @@ from typing import Dict
 import torch
 from torch import nn, Tensor
 
-from training.train_settings import CehrBertSettings
+from training.train_settings import TrainingSettings
 from data_loading.tokenizer import ConceptTokenizer
 from data_loading.variable_names import ModelInputNames
 
@@ -30,11 +30,12 @@ class PositionalEmbedding(torch.nn.Module):
 class JointEmbedding(nn.Module):
     """Construct the embeddings from word, and position embeddings."""
 
-    def __init__(self, settings: CehrBertSettings, tokenizer: ConceptTokenizer):
+    def __init__(self, settings: TrainingSettings, tokenizer: ConceptTokenizer):
         super().__init__()
         self.word_embeddings = nn.Embedding(num_embeddings=tokenizer.get_vocab_size(),
                                             embedding_dim=settings.hidden_size,
                                             padding_idx=tokenizer.get_padding_token_id())
+        nn.init.xavier_uniform_(self.word_embeddings.weight)
         self.position_embeddings = PositionalEmbedding(num_embeddings=settings.max_sequence_length,
                                                        embedding_dim=settings.hidden_size)
         self.layer_norm = nn.LayerNorm(normalized_shape=settings.hidden_size)
