@@ -137,21 +137,22 @@ class ModelTrainer:
         _data_loader = DataLoader(dataset=self._test_data,
                                   batch_size=self._settings.batch_size,
                                   num_workers=4)
-        with torch.no_grad():
-            for inputs, outputs in _data_loader:
-                batch_count += 1
+        # Not applying no_grad() as a workaround for https://github.com/pytorch/pytorch/issues/97111
+        # with torch.no_grad():
+        for inputs, outputs in _data_loader:
+            batch_count += 1
 
-                inputs = _dict_to_device(inputs, self._device)
-                outputs = _dict_to_device(outputs, self._device)
-                token_predictions = self._model(inputs)
+            inputs = _dict_to_device(inputs, self._device)
+            outputs = _dict_to_device(outputs, self._device)
+            token_predictions = self._model(inputs)
 
-                # Compute masked language model loss:
-                token_ids = outputs[ModelInputNames.TOKEN_IDS]
-                token_ids = token_ids.masked_fill(outputs[ModelInputNames.MASKED_TOKEN_MASK], IGNORE_INDEX)
-                loss_token = self._criterion(token_predictions.transpose(1, 2), token_ids)
+            # Compute masked language model loss:
+            token_ids = outputs[ModelInputNames.TOKEN_IDS]
+            token_ids = token_ids.masked_fill(outputs[ModelInputNames.MASKED_TOKEN_MASK], IGNORE_INDEX)
+            loss_token = self._criterion(token_predictions.transpose(1, 2), token_ids)
 
-                loss = loss_token  # + loss_nsp
-                total_lml_loss += loss.tolist()
+            loss = loss_token  # + loss_nsp
+            total_lml_loss += loss.tolist()
 
         logging.info("Mean LML loss test set: %s", total_lml_loss / batch_count)
         self._writer.add_scalar('Mean LML loss test set',
@@ -192,7 +193,7 @@ class ModelTrainer:
         else:
             file_name = os.path.join(self._settings.output_folder, f"checkpoint_{epoch:03d}.pth")
             logging.info("Loading model from '%s'", file_name)
-            loaded = torch.load(file_name)
+            loaded = torch.load(file_name, map_location=self._device)
             self._epoch = loaded["epoch"]
             self._model.load_state_dict(loaded["model_state_dict"])
             self._optimizer.load_state_dict(loaded["optimizer_state_dict"])
