@@ -68,17 +68,23 @@ class ModelTrainer:
             concept_tokenizer.save_to_json(json_file)
         return concept_tokenizer
 
-    def _get_data_sets(self) -> (ApolloDataset, ApolloDataset):
+    def _get_data_sets(self) -> (ApolloDataset, Optional[ApolloDataset]):
         mlm_objective = learning_objective.MaskedLanguageModelLearningObjective(self._concept_tokenizer)
         learning_objectives = [mlm_objective]
         data_transformer = ApolloDataTransformer(learning_objectives=learning_objectives,
                                                  max_sequence_length=self._settings.max_sequence_length)
+        if self._settings.do_evaluation:
+            train_fraction = self._settings.train_fraction
+            test_data = ApolloDataset(folder=self._settings.sequence_data_folder,
+                                      data_transformer=data_transformer,
+                                      is_train=False)
+        else:
+            train_fraction = 1.0
+            test_data = None
         train_data = ApolloDataset(folder=self._settings.sequence_data_folder,
                                    data_transformer=data_transformer,
+                                   train_test_split=train_fraction,
                                    is_train=True)
-        test_data = ApolloDataset(folder=self._settings.sequence_data_folder,
-                                  data_transformer=data_transformer,
-                                  is_train=True)
         return train_data, test_data
 
     def _train(self) -> None:
@@ -168,7 +174,8 @@ class ModelTrainer:
             logging.info("Starting epoch %d", self._epoch)
             self._train()
             self._save_checkpoint()
-            self._evaluate()
+            if self._settings.do_evaluation:
+                self._evaluate()
 
     def _save_checkpoint(self):
         file_name = os.path.join(self._settings.output_folder, f"checkpoint_{self._epoch:03d}.pth")
@@ -213,7 +220,8 @@ def main(args: List[str]):
                                                                    "masked_language_model_learning_objective"),
         visit_prediction_learning_objective=config.getboolean("data preparation",
                                                               "visit_prediction_learning_objective"),
-        is_training=config.getboolean("data preparation", "is_training"))
+        do_evaluation=config.getboolean("data preparation", "do_evaluation"),
+        num_epochs=config.getint("training", "num_epochs"))
     model_trainer = ModelTrainer(settings=training_settings)
     # Log config after initializing model_trainer so logger is initialized:
     logger.log_config(config)

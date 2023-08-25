@@ -10,7 +10,8 @@ class TrainingSettings:
     max_sequence_length: int = 512
     masked_language_model_learning_objective: bool = True
     visit_prediction_learning_objective: bool = False
-    is_training: bool = True
+    do_evaluation: bool = True
+    train_fraction: float = 0.8
     num_epochs: int = 10
     hidden_size: int = 768
     num_attention_heads: int = 8 #12
