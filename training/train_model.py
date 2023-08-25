@@ -166,8 +166,8 @@ class ModelTrainer:
         for self._epoch in range(start, self._settings.num_epochs + 1):
             logging.info("Starting epoch %d", self._epoch)
             self._train()
-            self._evaluate()
             self._save_checkpoint()
+            self._evaluate()
 
     def _save_checkpoint(self):
         file_name = os.path.join(self._settings.output_folder, f"checkpoint_{self._epoch:03d}.pth")

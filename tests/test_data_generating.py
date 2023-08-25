@@ -5,9 +5,8 @@ import os
 import pandas as pd
 import numpy as np
 import unittest
-import tensorflow as tf
 
-from data_loading import tokenizer, learning_objective, data_generator, parquet_data_iterator
+from data_loading import tokenizer, learning_objective, parquet_data_iterator
 
 
 class TestDataGenerating(unittest.TestCase):

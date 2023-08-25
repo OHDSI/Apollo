@@ -150,7 +150,7 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
         # Prefix CLS token:
         token_ids = np.concatenate(([self._concept_tokenizer.get_classification_token_id()], token_ids))
         padding_mask = np.concatenate(([False], padding_mask))
-        masked_token_ids = np.concatenate(([0], masked_token_ids))
+        masked_token_ids = np.concatenate(([self._concept_tokenizer.get_classification_token_id()], masked_token_ids))
         masked_token_mask = np.concatenate(([True], masked_token_mask))
         visit_concept_orders = np.concatenate(([0], visit_concept_orders))
 

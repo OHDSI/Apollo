@@ -19,7 +19,7 @@ class ParquetDataIterator:
         """
         self._dataset = pq.ParquetDataset(parquet_files)
         self._data_transformer = data_transformer
-        self._nrows = sum(fragment.count_rows() for fragment in self._dataset.fragments)
+        # self._nrows = sum(fragment.count_rows() for fragment in self._dataset.fragments)
         self._iterator = self.__iter__()  # Used by __next__
 
     def __iter__(self) -> Iterator[Dict]:
@@ -31,9 +31,10 @@ class ParquetDataIterator:
                     else:
                         yield row
 
-    def __len__(self) -> int:
-        """The number of batches per epoch"""
-        return self._nrows
+    # Not used by DataLoader:
+    # def __len__(self) -> int:
+    #     """The number of batches per epoch"""
+    #     return self._nrows
 
     def __next__(self) -> Dict:
         return next(self._iterator)
