@@ -27,10 +27,9 @@ IGNORE_INDEX = -1
 BATCH_REPORT_INTERVAL = 10
 
 
-def _dict_to_device(dict: Dict[str, torch.Tensor], device: torch.device) -> Dict[str, torch.Tensor]:
-    for key, value in dict.items():
-        dict[key] = value.to(device)
-    return dict
+def _dict_to_device(data: Dict[str, torch.Tensor], device: torch.device) -> Dict[str, torch.Tensor]:
+    return {key: value.to(device) for key, value in data.items()}
+
 
 class ModelTrainer:
 
@@ -98,14 +97,11 @@ class ModelTrainer:
                                   num_workers=4)
         for inputs, outputs in _data_loader:
             batch_count += 1
+            # for batch_count in range(1000):
 
             inputs = _dict_to_device(inputs, self._device)
             outputs = _dict_to_device(outputs, self._device)
             token_predictions = self._model(inputs)
-            # This currently throws an error. May work on GPU:
-            # if self._epoch == 1 and batch_count == 0:
-            #     self._writer.add_graph(self._model, inputs)
-            #     self._writer.flush()
 
             # Compute masked language model loss:
             token_ids = outputs[ModelInputNames.TOKEN_IDS]
@@ -113,11 +109,11 @@ class ModelTrainer:
             loss_token = self._criterion(token_predictions.transpose(1, 2), token_ids)
 
             loss = loss_token  # + loss_nsp
-            total_lml_loss += loss.tolist()
+            total_lml_loss += loss.float().mean().item()
             logging.info("Batch %d, Loss: %0.2f", batch_count, loss.tolist())
 
             self._writer.add_scalar('Per-batch training loss',
-                                    loss,
+                                    loss.float().mean(),
                                     self._epoch * 1000 + batch_count)
             self._writer.flush()
 
@@ -130,6 +126,9 @@ class ModelTrainer:
                 elapsed = time.time() - start_time
                 logging.info("Elapsed time: %s", elapsed)
                 start_time = time.time()
+                # for i in range(self._settings.max_sequence_length):
+                #     if token_ids[0, i] != IGNORE_INDEX:
+                #         print(token_predictions[0, i, token_ids[0, i]])
 
         logging.info("Mean LML loss training set: %s", total_lml_loss / batch_count)
         self._writer.add_scalar('Mean LML loss training set',

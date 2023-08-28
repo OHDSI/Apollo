@@ -20,5 +20,5 @@ class TrainingSettings:
     hidden_act: str = "gelu"
     hidden_dropout_prob: float = 0.1
     attention_probs_dropout_prob: float = 0.1
-    learning_rate = 0.005
+    learning_rate = 0.001
     weight_decay = 0.01
