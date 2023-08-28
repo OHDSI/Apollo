@@ -31,6 +31,13 @@ def _dict_to_device(data: Dict[str, torch.Tensor], device: torch.device) -> Dict
     return {key: value.to(device) for key, value in data.items()}
 
 
+def _masked_token_accuracy(token_predictions: torch.Tensor, token_ids: torch.Tensor) -> float:
+    mask = (token_ids == IGNORE_INDEX)
+    masked_predictions = token_predictions.argmax(2)[~mask]
+    masked_labels = token_ids[~mask]
+    return (masked_predictions == masked_labels).float().mean().item()
+
+
 class ModelTrainer:
 
     def __init__(self,
@@ -89,6 +96,7 @@ class ModelTrainer:
     def _train(self) -> None:
         self._model.train()
         total_lml_loss = 0.
+        total_accuracy = 0.
         batch_count = 0
         epoch_start_time = time.time()
         start_time = epoch_start_time
@@ -111,6 +119,7 @@ class ModelTrainer:
             loss = loss_token  # + loss_nsp
             total_lml_loss += loss.float().mean().item()
             logging.info("Batch %d, Loss: %0.2f", batch_count, loss.tolist())
+            total_accuracy += _masked_token_accuracy(token_predictions, token_ids)
 
             self._writer.add_scalar('Per-batch training loss',
                                     loss.float().mean(),
@@ -130,14 +139,22 @@ class ModelTrainer:
                 #     if token_ids[0, i] != IGNORE_INDEX:
                 #         print(token_predictions[0, i, token_ids[0, i]])
 
-        logging.info("Mean LML loss training set: %s", total_lml_loss / batch_count)
-        self._writer.add_scalar('Mean LML loss training set',
+        logging.info("Mean LML loss train set: %0.2f, mean LML accuracy train set: %0.2f%%",
+                     total_lml_loss / batch_count,
+                     100 * total_accuracy / batch_count)
+        self._writer.add_scalar('Mean LML loss train set',
                                 total_lml_loss / batch_count,
                                 self._epoch)
+        self._writer.add_scalar('Mean LML accuracy train'
+                                ' set',
+                                total_accuracy / batch_count,
+                                self._epoch)
+
 
     def _evaluate(self) -> None:
         self._model.eval()  # turn on evaluation mode
         total_lml_loss = 0.
+        total_accuracy = 0.
         batch_count = 0
         _data_loader = DataLoader(dataset=self._test_data,
                                   batch_size=self._settings.batch_size,
@@ -159,9 +176,16 @@ class ModelTrainer:
             loss = loss_token  # + loss_nsp
             total_lml_loss += loss.tolist()
 
-        logging.info("Mean LML loss test set: %s", total_lml_loss / batch_count)
+            total_accuracy += _masked_token_accuracy(token_predictions, token_ids)
+
+        logging.info("Mean LML loss test set: %0.2f, mean LML accuracy test set: %0.2f%%",
+                     total_lml_loss / batch_count,
+                     100 * total_accuracy / batch_count)
         self._writer.add_scalar('Mean LML loss test set',
                                 total_lml_loss / batch_count,
+                                self._epoch)
+        self._writer.add_scalar('Mean LML accuracy test set',
+                                total_accuracy / batch_count,
                                 self._epoch)
 
     def train_model(self) -> None:
