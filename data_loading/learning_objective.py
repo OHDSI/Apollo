@@ -145,10 +145,10 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
                                        padding_value=0,
                                        max_sequence_length=max_sequence_length - 1)
         dates = _pad_sequence(sequence=dates,
-                              padding_value=max_sequence_length,
+                              padding_value=0,
                               max_sequence_length=max_sequence_length - 1)
         ages = _pad_sequence(sequence=ages,
-                             padding_value=max_sequence_length,
+                             padding_value=0,
                              max_sequence_length=max_sequence_length - 1)
         visit_concept_orders = _pad_sequence(sequence=visit_concept_orders,
                                              padding_value=max_sequence_length - 1,

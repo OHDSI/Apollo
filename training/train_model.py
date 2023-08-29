@@ -75,7 +75,9 @@ class ModelTrainer:
         return concept_tokenizer
 
     def _get_data_sets(self) -> (ApolloDataset, Optional[ApolloDataset]):
-        mlm_objective = learning_objective.MaskedLanguageModelLearningObjective(self._concept_tokenizer)
+        mlm_objective = learning_objective.MaskedLanguageModelLearningObjective(
+            concept_tokenizer=self._concept_tokenizer,
+            one_mask_per_visit=self._settings.masked_language_model_learning_objective_one_token_per_visit)
         learning_objectives = [mlm_objective]
         data_transformer = ApolloDataTransformer(learning_objectives=learning_objectives,
                                                  max_sequence_length=self._settings.max_sequence_length)
@@ -135,9 +137,6 @@ class ModelTrainer:
                 elapsed = time.time() - start_time
                 logging.info("Elapsed time: %s", elapsed)
                 start_time = time.time()
-                # for i in range(self._settings.max_sequence_length):
-                #     if token_ids[0, i] != IGNORE_INDEX:
-                #         print(token_predictions[0, i, token_ids[0, i]])
 
         logging.info("Mean LML loss train set: %0.2f, mean LML accuracy train set: %0.2f%%",
                      total_lml_loss / batch_count,
