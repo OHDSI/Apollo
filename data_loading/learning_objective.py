@@ -98,20 +98,27 @@ class VisitPredictionLearningObjective(LearningObjective):
 
 class MaskedLanguageModelLearningObjective(LearningObjective):
 
-    def __init__(self, concept_tokenizer: ConceptTokenizer):
+    def __init__(
+            self,
+            concept_tokenizer: ConceptTokenizer,
+            one_mask_per_visit: bool = False
+    ):
         """
         Initialization
         Args:
             concept_tokenizer: The tokenizer to use to tokenize the concepts. Should already be trained.
+            one_mask_per_visit: If true, only one concept per visit is masked. Otherwise, multiple concepts per visit
+                can be masked.
         """
         self._concept_tokenizer = concept_tokenizer
+        self._one_mask_per_visit = one_mask_per_visit
 
     def process_row(self, row: Dict, start_index: int, end_index: int, max_sequence_length: int) -> tuple[Dict, Dict]:
         # Truncate the sequences:
         concept_ids = np.array(row[DataNames.CONCEPT_IDS][start_index:end_index])
         visit_segments = np.array(row[DataNames.VISIT_SEGMENTS][start_index:end_index])
-        dates = np.array(row[DataNames.DATES][start_index:end_index])
-        ages = np.array(row[DataNames.AGES][start_index:end_index])
+        dates = np.array(row[DataNames.DATES][start_index:end_index], dtype=np.float32)
+        ages = np.array(row[DataNames.AGES][start_index:end_index], dtype=np.float32)
         visit_concept_orders = np.array(row[DataNames.VISIT_CONCEPT_ORDERS][start_index:end_index])
 
         # Tokenize the concepts:
@@ -119,56 +126,65 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
         # Normalize the visit_orders using the smallest visit_concept_orders. Add 1 for CLS:
         visit_concept_orders = visit_concept_orders - min(visit_concept_orders) + 1
         # Mask the tokens IDs:
-        masked_token_ids, masked_token_mask = self._mask_tokens(token_ids)
+        masked_token_ids, masked_token_mask = self._mask_tokens(token_ids, visit_concept_orders)
 
         # Pad the sequences:
         token_ids = _pad_sequence(sequence=token_ids,
                                   padding_value=self._concept_tokenizer.get_padding_token_id(),
-                                  max_sequence_length=max_sequence_length-1)
+                                  max_sequence_length=max_sequence_length - 1)
         padding_mask = _pad_sequence(sequence=np.zeros(shape=concept_ids.shape, dtype=bool),
                                      padding_value=True,
-                                     max_sequence_length=max_sequence_length-1)
+                                     max_sequence_length=max_sequence_length - 1)
         masked_token_ids = _pad_sequence(sequence=masked_token_ids,
                                          padding_value=self._concept_tokenizer.get_padding_token_id(),
-                                         max_sequence_length=max_sequence_length-1)
+                                         max_sequence_length=max_sequence_length - 1)
         masked_token_mask = _pad_sequence(sequence=masked_token_mask,
                                           padding_value=True,
-                                          max_sequence_length=max_sequence_length-1)
-        # visit_segments = _pad_sequence(sequence=visit_segments,
-        #                                padding_value=max_sequence_length,
-        #                                max_sequence_length=max_sequence_length)
-        # dates = _pad_sequence(sequence=dates,
-        #                       padding_value=max_sequence_length,
-        #                       max_sequence_length=max_sequence_length)
-        # ages = _pad_sequence(sequence=ages,
-        #                      padding_value=max_sequence_length,
-        #                      max_sequence_length=max_sequence_length)
+                                          max_sequence_length=max_sequence_length - 1)
+        visit_segments = _pad_sequence(sequence=visit_segments,
+                                       padding_value=0,
+                                       max_sequence_length=max_sequence_length - 1)
+        dates = _pad_sequence(sequence=dates,
+                              padding_value=max_sequence_length,
+                              max_sequence_length=max_sequence_length - 1)
+        ages = _pad_sequence(sequence=ages,
+                             padding_value=max_sequence_length,
+                             max_sequence_length=max_sequence_length - 1)
         visit_concept_orders = _pad_sequence(sequence=visit_concept_orders,
-                                             padding_value=max_sequence_length-1,
-                                             max_sequence_length=max_sequence_length-1)
+                                             padding_value=max_sequence_length - 1,
+                                             max_sequence_length=max_sequence_length - 1)
 
         # Prefix CLS token:
         token_ids = np.concatenate(([self._concept_tokenizer.get_classification_token_id()], token_ids))
         padding_mask = np.concatenate(([False], padding_mask))
         masked_token_ids = np.concatenate(([self._concept_tokenizer.get_classification_token_id()], masked_token_ids))
         masked_token_mask = np.concatenate(([True], masked_token_mask))
+        visit_segments = np.concatenate(([0], visit_segments))
+        dates = np.concatenate(([0], dates))
+        ages = np.concatenate(([0], ages))
         visit_concept_orders = np.concatenate(([0], visit_concept_orders))
 
         # Create the input and output dictionaries:
         inputs = {ModelInputNames.MASKED_TOKEN_IDS: masked_token_ids,
                   ModelInputNames.PADDING_MASK: padding_mask,
-                  # ModelInputNames.DATES: dates,
-                  # ModelInputNames.AGES: ages,
-                  # ModelInputNames.VISIT_SEGMENTS: visit_segments,
+                  ModelInputNames.DATES: dates,
+                  ModelInputNames.AGES: ages,
+                  ModelInputNames.VISIT_SEGMENTS: visit_segments,
                   ModelInputNames.VISIT_CONCEPT_ORDERS: visit_concept_orders}
         outputs = {ModelInputNames.TOKEN_IDS: token_ids,
                    ModelInputNames.MASKED_TOKEN_MASK: masked_token_mask}
         return inputs, outputs
 
-    def _mask_tokens(self, token_ids: np.ndarray[int]) -> tuple[np.ndarray, np.ndarray]:
+    def _mask_tokens(self,
+                     token_ids: np.ndarray[int],
+                     visit_concept_orders: np.ndarray[int]
+                     ) -> tuple[np.ndarray, np.ndarray]:
         masked_token_ids = token_ids.copy()
         masked_token_mask = np.ones(len(token_ids), dtype=bool)
+        last_visit_order = 0
         for word_pos in range(0, len(token_ids)):
+            if self._one_mask_per_visit and visit_concept_orders[word_pos] == last_visit_order:
+                continue
             if random.random() < 0.15:
                 dice = random.random()
                 if dice < 0.8:
@@ -179,4 +195,5 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
                         self._concept_tokenizer.get_last_token_id())
                 # else: 10% of the time we just leave the token as is
                 masked_token_mask[word_pos] = False
+                last_visit_order = visit_concept_orders[word_pos]
         return masked_token_ids, masked_token_mask

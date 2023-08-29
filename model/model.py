@@ -6,7 +6,7 @@ from torch.nn import TransformerEncoder, TransformerEncoderLayer
 
 from data_loading.tokenizer import ConceptTokenizer
 from data_loading.variable_names import ModelInputNames
-from model.embedding import PositionalEmbedding
+from model.embedding import PositionalEmbedding, TimeEmbedding
 from training.train_settings import TrainingSettings
 
 # Inspired by https://pytorch.org/tutorials/beginner/transformer_tutorial.html
@@ -26,6 +26,11 @@ class TransformerModel(nn.Module):
         nn.init.xavier_uniform_(self.token_embeddings.weight)
         self.position_embeddings = PositionalEmbedding(num_embeddings=settings.max_sequence_length,
                                                        embedding_dim=settings.hidden_size)
+        self.age_embeddings = TimeEmbedding(out_features=settings.hidden_size)
+        self.date_embeddings = TimeEmbedding(out_features=settings.hidden_size)
+        self.segment_embeddings = nn.Embedding(num_embeddings=3,
+                                               embedding_dim=settings.hidden_size,
+                                               padding_idx=0)
         self.layer_norm = nn.LayerNorm(normalized_shape=settings.hidden_size)
         self.dropout = nn.Dropout(settings.hidden_dropout_prob)
 
@@ -57,11 +62,16 @@ class TransformerModel(nn.Module):
         masked_token_ids = inputs[ModelInputNames.MASKED_TOKEN_IDS]
         visit_concept_orders = inputs[ModelInputNames.VISIT_CONCEPT_ORDERS]
         padding_mask = inputs[ModelInputNames.PADDING_MASK]
+        ages = inputs[ModelInputNames.AGES]
+        dates = inputs[ModelInputNames.DATES]
+        visit_segment = inputs[ModelInputNames.VISIT_SEGMENTS]
 
         # Not sure about the sqrt here, but it's in multiple BERT implementations:
-        inputs_embeds = self.token_embeddings(masked_token_ids) * math.sqrt(self.token_embeddings.embedding_dim)
-        position_embeddings = self.position_embeddings(visit_concept_orders)
-        embeddings = inputs_embeds + position_embeddings
+        embeddings = self.token_embeddings(masked_token_ids) * math.sqrt(self.token_embeddings.embedding_dim)
+        embeddings += self.age_embeddings(ages)
+        embeddings += self.date_embeddings(dates)
+        embeddings += self.segment_embeddings(visit_segment)
+        embeddings += self.position_embeddings(visit_concept_orders)
         embeddings = self.layer_norm(embeddings)
         embeddings = self.dropout(embeddings)
 

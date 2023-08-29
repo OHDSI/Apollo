@@ -4,10 +4,6 @@ from typing import Dict
 import torch
 from torch import nn, Tensor
 
-from training.train_settings import TrainingSettings
-from data_loading.tokenizer import ConceptTokenizer
-from data_loading.variable_names import ModelInputNames
-
 # Inspired by https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py#L180
 # and https://pytorch.org/tutorials/beginner/transformer_tutorial.html
 
@@ -26,3 +22,24 @@ class PositionalEmbedding(torch.nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         return self.pe[x]
 
+
+class TimeEmbedding(nn.Module):
+    """
+    Time2Vec embedding layer as described in https://arxiv.org/pdf/1907.05321.pdf
+    """
+
+    def __init__(self, out_features: int):
+        super().__init__()
+        self.out_features = out_features
+        self.w0 = nn.parameter.Parameter(torch.randn(1, 1))
+        self.b0 = nn.parameter.Parameter(torch.randn(1))
+        self.w = nn.parameter.Parameter(torch.randn(1, out_features-1))
+        self.b = nn.parameter.Parameter(torch.randn(out_features-1))
+        self.f = torch.sin
+
+    def forward(self, tau):
+        part0 = (self.w0 * tau) + self.b0
+        # Probably a nicer way to do this using broadcasting:
+        part1 = self.f(tau.unsqueeze(-1).expand(-1,-1, self.out_features - 1) *
+                       self.w.unsqueeze(0).expand(tau.shape[0], tau.shape[1], -1))
+        return torch.cat([part0.unsqueeze(-1), part1], -1)

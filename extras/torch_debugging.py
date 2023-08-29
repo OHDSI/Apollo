@@ -53,6 +53,7 @@ good_padding_mask[7]
 
 
 from torch import nn
+import torch
 
 d_model = 32
 nhead = 4
