@@ -1,25 +1,59 @@
+from configparser import ConfigParser
 from dataclasses import dataclass
 
 
 @dataclass
 class TrainingSettings:
+    # system
     sequence_data_folder: str
     output_folder: str
-    batch_size: int = 32
-    min_sequence_length: int = 5
-    max_sequence_length: int = 250
-    masked_language_model_learning_objective: bool = True
-    masked_language_model_learning_objective_one_token_per_visit: bool = True
-    visit_prediction_learning_objective: bool = True
-    do_evaluation: bool = True
-    train_fraction: float = 0.8
-    num_epochs: int = 10
-    hidden_size: int = 100
-    num_attention_heads: int = 5 #12
-    num_hidden_layers: int = 5 #12
-    intermediate_size: int = 100 # 3072
-    hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.1
-    attention_probs_dropout_prob: float = 0.1
-    learning_rate = 0.001
-    weight_decay = 0.01
+
+    # data preparation
+    batch_size: int
+    max_sequence_length: int
+
+    # learning objectives
+    masked_concept_learning: bool
+    mask_one_concept_per_visit: bool
+    masked_visit_concept_learning: bool
+
+    # training
+    do_evaluation: bool
+    train_fraction: float
+    num_epochs: int
+    learning_rate: float
+    weight_decay: float
+
+    # model
+    hidden_size: int
+    num_attention_heads: int
+    num_hidden_layers: int
+    intermediate_size: int
+    hidden_act: str
+    hidden_dropout_prob: float
+    attention_probs_dropout_prob: float
+
+    def __init__(self, config: ConfigParser):
+        self.sequence_data_folder = config.get('system', 'sequence_data_folder')
+        self.output_folder = config.get('system', 'output_folder')
+
+        self.batch_size = config.getint('data preparation', 'batch_size')
+        self.max_sequence_length = config.getint('data preparation', 'max_sequence_length')
+
+        self.masked_concept_learning = config.getboolean('learning objectives', 'masked_concept_learning')
+        self.mask_one_concept_per_visit = config.getboolean('learning objectives', 'mask_one_concept_per_visit')
+        self.masked_visit_concept_learning = config.getboolean('learning objectives', 'masked_visit_concept_learning')
+
+        self.do_evaluation = config.getboolean('training', 'do_evaluation')
+        self.train_fraction = config.getfloat('training', 'train_fraction')
+        self.num_epochs = config.getint('training', 'num_epochs')
+        self.learning_rate = config.getfloat('training', 'learning_rate')
+        self.weight_decay = config.getfloat('training', 'weight_decay')
+
+        self.hidden_size = config.getint('model', 'hidden_size')
+        self.num_attention_heads = config.getint('model', 'num_attention_heads')
+        self.num_hidden_layers = config.getint('model', 'num_hidden_layers')
+        self.intermediate_size = config.getint('model', 'intermediate_size')
+        self.hidden_act = config.get('model', 'hidden_act')
+        self.hidden_dropout_prob = config.getfloat('model', 'hidden_dropout_prob')
+        self.attention_probs_dropout_prob = config.getfloat('model', 'attention_probs_dropout_prob')

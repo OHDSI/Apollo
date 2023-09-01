@@ -92,7 +92,7 @@ class ModelTrainer:
     def _get_data_sets(self) -> Tuple[ApolloDataset, Optional[ApolloDataset]]:
         mlm_objective = learning_objective.MaskedLanguageModelLearningObjective(
             concept_tokenizer=self._concept_tokenizer,
-            one_mask_per_visit=self._settings.masked_language_model_learning_objective_one_token_per_visit)
+            one_mask_per_visit=self._settings.mask_one_concept_per_visit)
         visit_mlm_objective = learning_objective.VisitPredictionLearningObjective(
             visit_concept_tokenizer=self._visit_concept_tokenizer)
         learning_objectives = [mlm_objective, visit_mlm_objective]
@@ -249,18 +249,7 @@ def main(args: List[str]):
     config = configparser.ConfigParser()
     with open(args[0]) as file:  # Explicitly opening file so error is thrown when not found
         config.read_file(file)
-    training_settings = TrainingSettings(
-        sequence_data_folder=config.get("system", "sequence_data_folder"),
-        output_folder=config.get("system", "output_folder"),
-        batch_size=config.getint("data preparation", "batch_size"),
-        min_sequence_length=config.getint("data preparation", "min_sequence_length"),
-        max_sequence_length=config.getint("data preparation", "max_sequence_length"),
-        masked_language_model_learning_objective=config.getboolean("data preparation",
-                                                                   "masked_language_model_learning_objective"),
-        visit_prediction_learning_objective=config.getboolean("data preparation",
-                                                              "visit_prediction_learning_objective"),
-        do_evaluation=config.getboolean("data preparation", "do_evaluation"),
-        num_epochs=config.getint("training", "num_epochs"))
+    training_settings = TrainingSettings(config)
     model_trainer = ModelTrainer(settings=training_settings)
     # Log config after initializing model_trainer so logger is initialized:
     logger.log_config(config)
