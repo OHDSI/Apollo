@@ -139,50 +139,48 @@ class ModelTrainer:
                                  num_workers=4)
         for inputs, outputs in data_loader:
             batch_count += 1
-            for batch_count in range(1, 1000):
+            # for batch_count in range(1, 1000):
 
-                inputs = _dict_to_device(inputs, self._device)
-                outputs = _dict_to_device(outputs, self._device)
-                predictions = self._model(inputs)
-                token_predictions = predictions[ModelOutputNames.TOKEN_PREDICTIONS]
-                visit_token_predictions = predictions[ModelOutputNames.VISIT_TOKEN_PREDICTIONS]
+            inputs = _dict_to_device(inputs, self._device)
+            outputs = _dict_to_device(outputs, self._device)
+            predictions = self._model(inputs)
+            token_predictions = predictions[ModelOutputNames.TOKEN_PREDICTIONS]
+            visit_token_predictions = predictions[ModelOutputNames.VISIT_TOKEN_PREDICTIONS]
 
-                # Compute token loss:
-                token_ids = outputs[ModelInputNames.TOKEN_IDS]
-                token_ids = token_ids.masked_fill(outputs[ModelInputNames.MASKED_TOKEN_MASK], IGNORE_INDEX)
-                loss_token = self._criterion(token_predictions.transpose(1, 2), token_ids)
-                total_token_loss += loss_token.float().mean().item()
-                token_accuracy = _masked_token_accuracy(token_predictions, token_ids)
-                total_token_accuracy += token_accuracy
+            # Compute token loss:
+            token_ids = outputs[ModelInputNames.TOKEN_IDS]
+            token_ids = token_ids.masked_fill(outputs[ModelInputNames.MASKED_TOKEN_MASK], IGNORE_INDEX)
+            loss_token = self._criterion(token_predictions.transpose(1, 2), token_ids)
+            total_token_loss += loss_token.float().mean().item()
+            token_accuracy = _masked_token_accuracy(token_predictions, token_ids)
+            total_token_accuracy += token_accuracy
 
-                # Compute visit token loss:
-                visit_token_ids = outputs[ModelInputNames.VISIT_TOKEN_IDS]
-                visit_token_ids = visit_token_ids.masked_fill(outputs[ModelInputNames.MASKED_VISIT_TOKEN_MASK],
-                                                              IGNORE_INDEX)
-                loss_visit_token = self._criterion(visit_token_predictions.transpose(1, 2), visit_token_ids)
-                total_visit_token_loss += loss_visit_token.float().mean().item()
-                visit_token_accuracy = _masked_token_accuracy(visit_token_predictions, visit_token_ids)
-                total_visit_token_accuracy += visit_token_accuracy
+            # Compute visit token loss:
+            visit_token_ids = outputs[ModelInputNames.VISIT_TOKEN_IDS]
+            visit_token_ids = visit_token_ids.masked_fill(outputs[ModelInputNames.MASKED_VISIT_TOKEN_MASK],
+                                                          IGNORE_INDEX)
+            loss_visit_token = self._criterion(visit_token_predictions.transpose(1, 2), visit_token_ids)
+            total_visit_token_loss += loss_visit_token.float().mean().item()
+            visit_token_accuracy = _masked_token_accuracy(visit_token_predictions, visit_token_ids)
+            total_visit_token_accuracy += visit_token_accuracy
 
-                if train:
-                    logging.info("Batch %d, Token loss: %0.2f, accuracy: %0.2f. Visit loss: %0.2f, accuracy: %0.2f",
-                                 batch_count,
-                                 loss_token.float().mean().item(),
-                                 token_accuracy,
-                                 loss_visit_token.float().mean().item(),
-                                 visit_token_accuracy)
-                    if batch_count == 999:
-                        print("asdf")
+            if train:
+                logging.info("Batch %d, Token loss: %0.2f, accuracy: %0.2f. Visit loss: %0.2f, accuracy: %0.2f",
+                             batch_count,
+                             loss_token.float().mean().item(),
+                             token_accuracy,
+                             loss_visit_token.float().mean().item(),
+                             visit_token_accuracy)
 
-                    # Backpropagation:
-                    self._optimizer.zero_grad()
-                    loss = loss_token + loss_visit_token
-                    loss.backward()
-                    self._optimizer.step()
+                # Backpropagation:
+                self._optimizer.zero_grad()
+                loss = loss_token + loss_visit_token
+                loss.backward()
+                self._optimizer.step()
 
-                    if batch_count % BATCH_REPORT_INTERVAL == 0:
-                        elapsed = time.time() - start_time
-                        logging.info("Average time per batch: %s", elapsed / batch_count)
+                if batch_count % BATCH_REPORT_INTERVAL == 0:
+                    elapsed = time.time() - start_time
+                    logging.info("Average time per batch: %s", elapsed / batch_count)
 
         logging.info("Mean token loss %s set: %0.2f, mean token accuracy %s set: %0.2f%%",
                      print_label,
