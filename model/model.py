@@ -5,17 +5,17 @@ from torch import nn, Tensor
 from torch.nn import TransformerEncoder, TransformerEncoderLayer
 
 from data_loading.tokenizer import ConceptTokenizer
-from data_loading.variable_names import ModelInputNames
+from data_loading.variable_names import ModelInputNames, ModelOutputNames
 from model.embedding import PositionalEmbedding, TimeEmbedding
 from training.train_settings import TrainingSettings
-
-# Inspired by https://pytorch.org/tutorials/beginner/transformer_tutorial.html
-# and https://coaxsoft.com/blog/building-bert-with-pytorch-from-scratch
 
 
 class TransformerModel(nn.Module):
 
-    def __init__(self, settings: TrainingSettings, tokenizer: ConceptTokenizer):
+    def __init__(self,
+                 settings: TrainingSettings,
+                 tokenizer: ConceptTokenizer,
+                 visit_tokenizer: ConceptTokenizer):
         super().__init__()
         self.model_type = 'Transformer'
 
@@ -26,11 +26,15 @@ class TransformerModel(nn.Module):
         nn.init.xavier_uniform_(self.token_embeddings.weight)
         self.position_embeddings = PositionalEmbedding(num_embeddings=settings.max_sequence_length,
                                                        embedding_dim=settings.hidden_size)
-        self.age_embeddings = TimeEmbedding(out_features=settings.hidden_size)
-        self.date_embeddings = TimeEmbedding(out_features=settings.hidden_size)
+        self.age_embeddings = TimeEmbedding(embedding_dim=settings.hidden_size)
+        self.date_embeddings = TimeEmbedding(embedding_dim=settings.hidden_size)
         self.segment_embeddings = nn.Embedding(num_embeddings=3,
                                                embedding_dim=settings.hidden_size,
                                                padding_idx=0)
+        self.visit_token_embeddings = nn.Embedding(num_embeddings=visit_tokenizer.get_vocab_size(),
+                                                   embedding_dim=settings.hidden_size,
+                                                   padding_idx=visit_tokenizer.get_padding_token_id())
+        nn.init.xavier_uniform_(self.visit_token_embeddings.weight)
         self.layer_norm = nn.LayerNorm(normalized_shape=settings.hidden_size)
         self.dropout = nn.Dropout(settings.hidden_dropout_prob)
 
@@ -48,36 +52,45 @@ class TransformerModel(nn.Module):
             if 'weight' in name and param.data.dim() == 2:
                 nn.init.kaiming_uniform_(param)
 
-        # Decoder:
+        # Decoders:
         self.masked_token_decoder = nn.Linear(in_features=settings.hidden_size,
                                               out_features=tokenizer.get_vocab_size())
         self.masked_token_decoder.bias.data.zero_()
-        # decoder is shared with embedding layer
-        self.masked_token_decoder.weight = self.token_embeddings.weight
+        nn.init.xavier_uniform_(self.masked_token_decoder.weight)
+        # Alternatively, decoder is shared with embedding layer:
+        # self.masked_token_decoder.weight = self.token_embeddings.weight
+        self.masked_vist_token_decoder = nn.Linear(in_features=settings.hidden_size,
+                                                   out_features=visit_tokenizer.get_vocab_size())
+        self.masked_vist_token_decoder.bias.data.zero_()
+        nn.init.xavier_uniform_(self.masked_vist_token_decoder.weight)
 
     def forward(
             self,
             inputs: Dict[str, Tensor]
-    ) -> Tensor:
+    ) -> Dict[str, Tensor]:
         masked_token_ids = inputs[ModelInputNames.MASKED_TOKEN_IDS]
         visit_concept_orders = inputs[ModelInputNames.VISIT_CONCEPT_ORDERS]
         padding_mask = inputs[ModelInputNames.PADDING_MASK]
         ages = inputs[ModelInputNames.AGES]
         dates = inputs[ModelInputNames.DATES]
         visit_segment = inputs[ModelInputNames.VISIT_SEGMENTS]
+        masked_visit_token_ids = inputs[ModelInputNames.MASKED_VISIT_TOKEN_IDS]
 
-        # Not sure about the sqrt here, but it's in multiple BERT implementations:
+        # Not sure about multiplication with the sqrt here, but it's in multiple BERT implementations:
         embeddings = self.token_embeddings(masked_token_ids) * math.sqrt(self.token_embeddings.embedding_dim)
         embeddings += self.age_embeddings(ages)
         embeddings += self.date_embeddings(dates)
         embeddings += self.segment_embeddings(visit_segment)
         embeddings += self.position_embeddings(visit_concept_orders)
+        embeddings += self.visit_token_embeddings(masked_visit_token_ids) * math.sqrt(
+            self.visit_token_embeddings.embedding_dim)
         embeddings = self.layer_norm(embeddings)
         embeddings = self.dropout(embeddings)
 
         encoded = self.transformer_encoder(src=embeddings, src_key_padding_mask=padding_mask)
 
-        token_predictions = self.masked_token_decoder(encoded) # No softmax here, as it's included in CrossEntropyLoss
-        return token_predictions
-        # first_word = encoded[:, 0, :]
-        # return self.softmax(token_predictions), self.classification_layer(first_word)
+        # No softmax here, as it's included in CrossEntropyLoss:
+        token_predictions = self.masked_token_decoder(encoded)
+        visit_token_predictions = self.masked_vist_token_decoder(encoded)
+        return {ModelOutputNames.TOKEN_PREDICTIONS: token_predictions,
+                ModelOutputNames.VISIT_TOKEN_PREDICTIONS: visit_token_predictions}

@@ -10,7 +10,7 @@ class TrainingSettings:
     max_sequence_length: int = 250
     masked_language_model_learning_objective: bool = True
     masked_language_model_learning_objective_one_token_per_visit: bool = True
-    visit_prediction_learning_objective: bool = False
+    visit_prediction_learning_objective: bool = True
     do_evaluation: bool = True
     train_fraction: float = 0.8
     num_epochs: int = 10
