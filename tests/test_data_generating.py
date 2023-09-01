@@ -77,8 +77,8 @@ class TestDataGenerating(unittest.TestCase):
 
 
     def test_data_generator(self):
-        learning_objectives = [learning_objective.MaskedLanguageModelLearningObjective(work_folder=self.parquet_folder),
-                               learning_objective.VisitPredictionLearningObjective(work_folder=self.parquet_folder)]
+        learning_objectives = [learning_objective.MaskedConceptLearningObjective(work_folder=self.parquet_folder),
+                               learning_objective.MaskedVisitConceptLearningObjective(work_folder=self.parquet_folder)]
         bert_data_generator = data_generator.DataGenerator(training_data_path=self.parquet_folder,
                                                            batch_size=4,
                                                            max_sequence_length=10,

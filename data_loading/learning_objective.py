@@ -56,61 +56,7 @@ class LearningObjective(ABC):
         pass
 
 
-class VisitPredictionLearningObjective(LearningObjective):
-
-    def __init__(self, visit_concept_tokenizer: ConceptTokenizer):
-        """
-        Initialization
-        Args:
-            visit_tokenizer: The tokenizer to use to tokenize the visit concepts.
-        """
-        self._tokenizer = visit_concept_tokenizer
-
-    def process_row(self, row: Dict, start_index: int, end_index: int, max_sequence_length: int) -> tuple[Dict, Dict]:
-        visit_concept_ids = np.array(row[DataNames.VISIT_CONCEPT_IDS][start_index:end_index])
-
-        # Tokenize the visit concepts
-        visit_token_ids = np.array(self._tokenizer.encode(visit_concept_ids))
-        # Mask visit tokens
-        masked_visit_token_ids, masked_visit_token_mask = self._mask_visit_tokens(visit_token_ids)
-
-        # Pad the sequences
-        visit_token_ids = _prefix_and_pad(sequence=visit_token_ids,
-                                          prefix_value=self._tokenizer.get_classification_token_id(),
-                                          padding_value=self._tokenizer.get_padding_token_id(),
-                                          max_sequence_length=max_sequence_length)
-        masked_visit_token_ids = _prefix_and_pad(sequence=masked_visit_token_ids,
-                                                 prefix_value=self._tokenizer.get_classification_token_id(),
-                                                 padding_value=self._tokenizer.get_padding_token_id(),
-                                                 max_sequence_length=max_sequence_length)
-        masked_visit_token_mask = _prefix_and_pad(sequence=masked_visit_token_mask,
-                                                  prefix_value=True,
-                                                  padding_value=True,
-                                                  max_sequence_length=max_sequence_length)
-
-        # Create the input and output dicts
-        input_dict = {
-            ModelInputNames.MASKED_VISIT_TOKEN_IDS: masked_visit_token_ids
-        }
-        output_dict = {
-            ModelInputNames.VISIT_TOKEN_IDS: visit_token_ids,
-            ModelInputNames.MASKED_VISIT_TOKEN_MASK: masked_visit_token_mask
-        }
-        return input_dict, output_dict
-
-    def _mask_visit_tokens(self,
-                           visit_token_ids: np.ndarray[int]
-                           ) -> tuple[np.ndarray, np.ndarray]:
-        masked_visit_token_ids = np.asarray(visit_token_ids).copy()
-        masked_visit_token_mask = np.ones(len(visit_token_ids), dtype=bool)
-        for word_pos in range(0, len(visit_token_ids)):
-            if random.random() < 0.5:
-                masked_visit_token_mask[word_pos] = False
-                masked_visit_token_ids[word_pos] = self._tokenizer.get_mask_token_id()
-        return masked_visit_token_ids, masked_visit_token_mask
-
-
-class MaskedLanguageModelLearningObjective(LearningObjective):
+class MaskedConceptLearningObjective(LearningObjective):
 
     def __init__(
             self,
@@ -209,3 +155,58 @@ class MaskedLanguageModelLearningObjective(LearningObjective):
                 masked_token_mask[word_pos] = False
                 last_visit_order = visit_concept_orders[word_pos]
         return masked_token_ids, masked_token_mask
+
+
+
+class MaskedVisitConceptLearningObjective(LearningObjective):
+
+    def __init__(self, visit_concept_tokenizer: ConceptTokenizer):
+        """
+        Initialization
+        Args:
+            visit_tokenizer: The tokenizer to use to tokenize the visit concepts.
+        """
+        self._tokenizer = visit_concept_tokenizer
+
+    def process_row(self, row: Dict, start_index: int, end_index: int, max_sequence_length: int) -> tuple[Dict, Dict]:
+        visit_concept_ids = np.array(row[DataNames.VISIT_CONCEPT_IDS][start_index:end_index])
+
+        # Tokenize the visit concepts
+        visit_token_ids = np.array(self._tokenizer.encode(visit_concept_ids))
+        # Mask visit tokens
+        masked_visit_token_ids, masked_visit_token_mask = self._mask_visit_tokens(visit_token_ids)
+
+        # Pad the sequences
+        visit_token_ids = _prefix_and_pad(sequence=visit_token_ids,
+                                          prefix_value=self._tokenizer.get_classification_token_id(),
+                                          padding_value=self._tokenizer.get_padding_token_id(),
+                                          max_sequence_length=max_sequence_length)
+        masked_visit_token_ids = _prefix_and_pad(sequence=masked_visit_token_ids,
+                                                 prefix_value=self._tokenizer.get_classification_token_id(),
+                                                 padding_value=self._tokenizer.get_padding_token_id(),
+                                                 max_sequence_length=max_sequence_length)
+        masked_visit_token_mask = _prefix_and_pad(sequence=masked_visit_token_mask,
+                                                  prefix_value=True,
+                                                  padding_value=True,
+                                                  max_sequence_length=max_sequence_length)
+
+        # Create the input and output dicts
+        inputs = {
+            ModelInputNames.MASKED_VISIT_TOKEN_IDS: masked_visit_token_ids
+        }
+        outputs = {
+            ModelInputNames.VISIT_TOKEN_IDS: visit_token_ids,
+            ModelInputNames.MASKED_VISIT_TOKEN_MASK: masked_visit_token_mask
+        }
+        return inputs, outputs
+
+    def _mask_visit_tokens(self,
+                           visit_token_ids: np.ndarray[int]
+                           ) -> tuple[np.ndarray, np.ndarray]:
+        masked_visit_token_ids = np.asarray(visit_token_ids).copy()
+        masked_visit_token_mask = np.ones(len(visit_token_ids), dtype=bool)
+        for word_pos in range(0, len(visit_token_ids)):
+            if random.random() < 0.5:
+                masked_visit_token_mask[word_pos] = False
+                masked_visit_token_ids[word_pos] = self._tokenizer.get_mask_token_id()
+        return masked_visit_token_ids, masked_visit_token_mask

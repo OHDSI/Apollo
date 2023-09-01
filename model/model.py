@@ -1,6 +1,7 @@
 import math
 from typing import Dict
 
+import torch
 from torch import nn, Tensor
 from torch.nn import TransformerEncoder, TransformerEncoderLayer
 
@@ -17,7 +18,7 @@ class TransformerModel(nn.Module):
                  tokenizer: ConceptTokenizer,
                  visit_tokenizer: ConceptTokenizer):
         super().__init__()
-        self.model_type = 'Transformer'
+        self.settings = settings
 
         # Embeddings:
         self.token_embeddings = nn.Embedding(num_embeddings=tokenizer.get_vocab_size(),
@@ -31,10 +32,11 @@ class TransformerModel(nn.Module):
         self.segment_embeddings = nn.Embedding(num_embeddings=3,
                                                embedding_dim=settings.hidden_size,
                                                padding_idx=0)
-        self.visit_token_embeddings = nn.Embedding(num_embeddings=visit_tokenizer.get_vocab_size(),
-                                                   embedding_dim=settings.hidden_size,
-                                                   padding_idx=visit_tokenizer.get_padding_token_id())
-        nn.init.xavier_uniform_(self.visit_token_embeddings.weight)
+        if settings.masked_visit_concept_learning:
+            self.visit_token_embeddings = nn.Embedding(num_embeddings=visit_tokenizer.get_vocab_size(),
+                                                       embedding_dim=settings.hidden_size,
+                                                       padding_idx=visit_tokenizer.get_padding_token_id())
+            nn.init.xavier_uniform_(self.visit_token_embeddings.weight)
         self.layer_norm = nn.LayerNorm(normalized_shape=settings.hidden_size)
         self.dropout = nn.Dropout(settings.hidden_dropout_prob)
 
@@ -59,10 +61,11 @@ class TransformerModel(nn.Module):
         nn.init.xavier_uniform_(self.masked_token_decoder.weight)
         # Alternatively, decoder is shared with embedding layer:
         # self.masked_token_decoder.weight = self.token_embeddings.weight
-        self.masked_vist_token_decoder = nn.Linear(in_features=settings.hidden_size,
-                                                   out_features=visit_tokenizer.get_vocab_size())
-        self.masked_vist_token_decoder.bias.data.zero_()
-        nn.init.xavier_uniform_(self.masked_vist_token_decoder.weight)
+        if settings.masked_visit_concept_learning:
+            self.masked_vist_token_decoder = nn.Linear(in_features=settings.hidden_size,
+                                                       out_features=visit_tokenizer.get_vocab_size())
+            self.masked_vist_token_decoder.bias.data.zero_()
+            nn.init.xavier_uniform_(self.masked_vist_token_decoder.weight)
 
     def forward(
             self,
@@ -74,7 +77,6 @@ class TransformerModel(nn.Module):
         ages = inputs[ModelInputNames.AGES]
         dates = inputs[ModelInputNames.DATES]
         visit_segment = inputs[ModelInputNames.VISIT_SEGMENTS]
-        masked_visit_token_ids = inputs[ModelInputNames.MASKED_VISIT_TOKEN_IDS]
 
         # Not sure about multiplication with the sqrt here, but it's in multiple BERT implementations:
         embeddings = self.token_embeddings(masked_token_ids) * math.sqrt(self.token_embeddings.embedding_dim)
@@ -82,8 +84,11 @@ class TransformerModel(nn.Module):
         embeddings += self.date_embeddings(dates)
         embeddings += self.segment_embeddings(visit_segment)
         embeddings += self.position_embeddings(visit_concept_orders)
-        embeddings += self.visit_token_embeddings(masked_visit_token_ids) * math.sqrt(
-            self.visit_token_embeddings.embedding_dim)
+
+        if self.settings.masked_visit_concept_learning:
+            masked_visit_token_ids = inputs[ModelInputNames.MASKED_VISIT_TOKEN_IDS]
+            embeddings += self.visit_token_embeddings(masked_visit_token_ids) * math.sqrt(
+                self.visit_token_embeddings.embedding_dim)
         embeddings = self.layer_norm(embeddings)
         embeddings = self.dropout(embeddings)
 

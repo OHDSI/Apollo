@@ -107,3 +107,19 @@ xencoder.eval()
 with torch.no_grad():
     print(xencoder(x, src_key_padding_mask=mask).shape)
 # torch.Size([3, 4, 32]) # Last token is truncated
+
+# Dump inputs to CSV during debugging. Requires
+
+import pandas as pd
+result = inputs
+result.update(outputs)
+result.update({"concept_ids": _prefix_and_pad(concept_ids, 0, 0, max_sequence_length)})
+df = pd.DataFrame.from_dict(result)
+df.to_csv("d:/GPM_MDCD/model/example_inputs.csv", index=False)
+
+import pandas as pd
+result = inputs
+result.update(outputs)
+result.update({"concept_ids": _prefix_and_pad(visit_concept_ids, 0, 0, max_sequence_length)})
+df = pd.DataFrame.from_dict(result)
+df.to_csv("d:/GPM_MDCD/model/example_inputs_visit.csv", index=False)

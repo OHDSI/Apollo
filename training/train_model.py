@@ -47,7 +47,8 @@ class ModelTrainer:
         self._configure_logger()
         self._writer = SummaryWriter(settings.output_folder)
         self._concept_tokenizer = self._get_concept_tokenizer()
-        self._visit_concept_tokenizer = self._get_visit_concept_tokenizer()
+        if settings.masked_visit_concept_learning:
+            self._visit_concept_tokenizer = self._get_visit_concept_tokenizer()
         self._train_data, self._test_data = self._get_data_sets()
         self._criterion = nn.CrossEntropyLoss(ignore_index=IGNORE_INDEX)
         self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -90,12 +91,12 @@ class ModelTrainer:
         return visit_concept_tokenizer
 
     def _get_data_sets(self) -> Tuple[ApolloDataset, Optional[ApolloDataset]]:
-        mlm_objective = learning_objective.MaskedLanguageModelLearningObjective(
-            concept_tokenizer=self._concept_tokenizer,
-            one_mask_per_visit=self._settings.mask_one_concept_per_visit)
-        visit_mlm_objective = learning_objective.VisitPredictionLearningObjective(
-            visit_concept_tokenizer=self._visit_concept_tokenizer)
-        learning_objectives = [mlm_objective, visit_mlm_objective]
+        learning_objectives = [learning_objective.MaskedConceptLearningObjective(
+                concept_tokenizer=self._concept_tokenizer,
+                one_mask_per_visit=self._settings.mask_one_concept_per_visit)]
+        if self._settings.masked_visit_concept_learning:
+            learning_objectives.append(learning_objective.MaskedVisitConceptLearningObjective(
+                visit_concept_tokenizer=self._visit_concept_tokenizer))
         data_transformer = ApolloDataTransformer(learning_objectives=learning_objectives,
                                                  max_sequence_length=self._settings.max_sequence_length)
         if self._settings.do_evaluation:
