@@ -38,3 +38,4 @@ class ModelOutputNames:
     """
     TOKEN_PREDICTIONS = "token_predictions"
     VISIT_TOKEN_PREDICTIONS = "visit_token_predictions"
+    LABEL_PREDICTIONS = "label_predictions"

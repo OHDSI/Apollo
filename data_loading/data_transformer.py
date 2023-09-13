@@ -1,26 +1,27 @@
 import random
 from typing import List, Dict, Literal
 
-from data_loading.learning_objective import LearningObjective
-
+from data_loading.learning_objectives import LearningObjective
 
 SEQUENCE_LENGTH_COLUMN_NAME = "num_of_concepts"
-TRUNCATE_TYPE = Literal["random", "last"]
+TRUNCATE_TYPES = ["random", "tail"]
 
 
 class ApolloDataTransformer:
     def __init__(self,
                  learning_objectives: List[LearningObjective],
                  max_sequence_length: int = 512,
-                 truncate_type: TRUNCATE_TYPE = "random"):
+                 truncate_type: str = "random"):
         """
         Initialization
         Args:
             learning_objectives: A list of learning objectives for which to generate data.
             max_sequence_length: The maximum length of a sequence.
-            truncate_type: The type of truncation to use. Either "random" or "last". If "last", the last
+            truncate_type: The type of truncation to use. Either "random" or "tail". If "tail", the last
                 max_sequence_length tokens will be used.
         """
+        if truncate_type not in TRUNCATE_TYPES:
+            raise ValueError(f"Unknown truncate type: {truncate_type}. Must be one of {TRUNCATE_TYPES}")
         self._learning_objectives = learning_objectives
         self._max_sequence_length = max_sequence_length
         self._truncate_type = truncate_type

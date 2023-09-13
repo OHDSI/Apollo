@@ -15,7 +15,7 @@ import utils.logger as logger
 from training.train_settings import TrainingSettings
 from data_loading.dataset import ApolloDataset
 from data_loading.data_transformer import ApolloDataTransformer
-import data_loading.learning_objective as learning_objective
+import data_loading.learning_objectives as learning_objectives
 import data_loading.tokenizer as tokenizer
 from data_loading.variable_names import DataNames, ModelInputNames, ModelOutputNames
 from model.model import TransformerModel
@@ -23,19 +23,11 @@ from model.model import TransformerModel
 # Inspired by https://pytorch.org/tutorials/beginner/transformer_tutorial.html
 
 LOGGER_FILE_NAME = "_model_training_log.txt"
-IGNORE_INDEX = -1
 BATCH_REPORT_INTERVAL = 10
 
 
 def _dict_to_device(data: Dict[str, torch.Tensor], device: torch.device) -> Dict[str, torch.Tensor]:
     return {key: value.to(device) for key, value in data.items()}
-
-
-def _masked_token_accuracy(token_predictions: torch.Tensor, token_ids: torch.Tensor) -> float:
-    mask = (token_ids == IGNORE_INDEX)
-    masked_predictions = token_predictions.argmax(2)[~mask]
-    masked_labels = token_ids[~mask]
-    return (masked_predictions == masked_labels).float().mean().item()
 
 
 class ModelTrainer:
@@ -45,12 +37,24 @@ class ModelTrainer:
         self._settings = settings
         os.makedirs(settings.output_folder, exist_ok=True)
         self._configure_logger()
+        logger.log_settings(settings)
         self._writer = SummaryWriter(settings.output_folder)
         self._concept_tokenizer = self._get_concept_tokenizer()
-        if settings.masked_visit_concept_learning:
+        if settings.masked_visit_concept_learning or settings.label_prediction:
             self._visit_concept_tokenizer = self._get_visit_concept_tokenizer()
+        self._learning_objectives = []
+        if settings.masked_concept_learning:
+            self._learning_objectives.append(learning_objectives.MaskedConceptLearningObjective(
+                concept_tokenizer=self._concept_tokenizer,
+                one_mask_per_visit=self._settings.mask_one_concept_per_visit))
+        if settings.masked_visit_concept_learning:
+            self._learning_objectives.append(learning_objectives.MaskedVisitConceptLearningObjective(
+                visit_concept_tokenizer=self._visit_concept_tokenizer))
+        if settings.label_prediction:
+            self._learning_objectives.append(learning_objectives.LabelPredictionLearningObjective(
+                concept_tokenizer=self._concept_tokenizer,
+                visit_tokenizer=self._visit_concept_tokenizer))
         self._train_data, self._test_data = self._get_data_sets()
-        self._criterion = nn.CrossEntropyLoss(ignore_index=IGNORE_INDEX)
         self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self._model = TransformerModel(settings=self._settings,
                                        tokenizer=self._concept_tokenizer,
@@ -62,7 +66,7 @@ class ModelTrainer:
         self._epoch = 0
 
     def _configure_logger(self) -> None:
-        logger.create_logger(os.path.join(self._settings.output_folder, LOGGER_FILE_NAME))
+        logger.create_logger(log_file_name=os.path.join(self._settings.output_folder, LOGGER_FILE_NAME))
 
     def _get_concept_tokenizer(self) -> tokenizer.ConceptTokenizer:
         json_file = os.path.join(self._settings.output_folder, "_concept_tokenizer.json")
@@ -91,14 +95,9 @@ class ModelTrainer:
         return visit_concept_tokenizer
 
     def _get_data_sets(self) -> Tuple[ApolloDataset, Optional[ApolloDataset]]:
-        learning_objectives = [learning_objective.MaskedConceptLearningObjective(
-                concept_tokenizer=self._concept_tokenizer,
-                one_mask_per_visit=self._settings.mask_one_concept_per_visit)]
-        if self._settings.masked_visit_concept_learning:
-            learning_objectives.append(learning_objective.MaskedVisitConceptLearningObjective(
-                visit_concept_tokenizer=self._visit_concept_tokenizer))
-        data_transformer = ApolloDataTransformer(learning_objectives=learning_objectives,
-                                                 max_sequence_length=self._settings.max_sequence_length)
+        data_transformer = ApolloDataTransformer(learning_objectives=self._learning_objectives,
+                                                 max_sequence_length=self._settings.max_sequence_length,
+                                                 truncate_type=self._settings.truncate_type)
         if self._settings.do_evaluation:
             train_fraction = self._settings.train_fraction
             test_data = ApolloDataset(folder=self._settings.sequence_data_folder,
@@ -129,15 +128,13 @@ class ModelTrainer:
             dataset = self._test_data
             print_label = "tests"
             # Not applying no_grad() as a workaround for https://github.com/pytorch/pytorch/issues/97111
-        total_token_loss = 0.
-        total_token_accuracy = 0.
-        total_visit_token_loss = 0.
-        total_visit_token_accuracy = 0.
+        for learning_objective in self._learning_objectives:
+            learning_objective.reset_performance_metrics()
         batch_count = 0
         start_time = time.time()
         data_loader = DataLoader(dataset=dataset,
                                  batch_size=self._settings.batch_size,
-                                 num_workers=4)
+                                 num_workers=1)
         for inputs, outputs in data_loader:
             batch_count += 1
             # for batch_count in range(1, 1000):
@@ -145,66 +142,35 @@ class ModelTrainer:
             inputs = _dict_to_device(inputs, self._device)
             outputs = _dict_to_device(outputs, self._device)
             predictions = self._model(inputs)
-            token_predictions = predictions[ModelOutputNames.TOKEN_PREDICTIONS]
-            visit_token_predictions = predictions[ModelOutputNames.VISIT_TOKEN_PREDICTIONS]
 
-            # Compute token loss:
-            token_ids = outputs[ModelInputNames.TOKEN_IDS]
-            token_ids = token_ids.masked_fill(outputs[ModelInputNames.MASKED_TOKEN_MASK], IGNORE_INDEX)
-            loss_token = self._criterion(token_predictions.transpose(1, 2), token_ids)
-            total_token_loss += loss_token.float().mean().item()
-            token_accuracy = _masked_token_accuracy(token_predictions, token_ids)
-            total_token_accuracy += token_accuracy
-
-            # Compute visit token loss:
-            visit_token_ids = outputs[ModelInputNames.VISIT_TOKEN_IDS]
-            visit_token_ids = visit_token_ids.masked_fill(outputs[ModelInputNames.MASKED_VISIT_TOKEN_MASK],
-                                                          IGNORE_INDEX)
-            loss_visit_token = self._criterion(visit_token_predictions.transpose(1, 2), visit_token_ids)
-            total_visit_token_loss += loss_visit_token.float().mean().item()
-            visit_token_accuracy = _masked_token_accuracy(visit_token_predictions, visit_token_ids)
-            total_visit_token_accuracy += visit_token_accuracy
+            loss = 0.0
+            first = True
+            for learning_objective in self._learning_objectives:
+                objective_loss = learning_objective.compute_loss(outputs=outputs,
+                                                                 predictions=predictions)
+                if first:
+                    loss = objective_loss
+                    first = False
+                else:
+                    loss += objective_loss
 
             if train:
-                logging.info("Batch %d, Token loss: %0.2f, accuracy: %0.2f. Visit loss: %0.2f, accuracy: %0.2f",
-                             batch_count,
-                             loss_token.float().mean().item(),
-                             token_accuracy,
-                             loss_visit_token.float().mean().item(),
-                             visit_token_accuracy)
-
-                # Backpropagation:
                 self._optimizer.zero_grad()
-                loss = loss_token + loss_visit_token
                 loss.backward()
                 self._optimizer.step()
 
                 if batch_count % BATCH_REPORT_INTERVAL == 0:
                     elapsed = time.time() - start_time
-                    logging.info("Average time per batch: %s", elapsed / batch_count)
+                    logging.info("Batches completed: %d, average time per batch: %s",
+                                 batch_count,
+                                 elapsed / batch_count)
 
-        logging.info("Mean token loss %s set: %0.2f, mean token accuracy %s set: %0.2f%%",
-                     print_label,
-                     total_token_loss / batch_count,
-                     print_label,
-                     100 * total_token_accuracy / batch_count)
-        logging.info("Mean visit token loss %s set: %0.2f, mean token accuracy %s set: %0.2f%%",
-                     print_label,
-                     total_visit_token_loss / batch_count,
-                     print_label,
-                     100 * total_visit_token_accuracy / batch_count)
-        self._writer.add_scalar(f"Mean token loss {print_label}",
-                                total_token_loss / batch_count,
-                                self._epoch)
-        self._writer.add_scalar(f"Mean token accuracy {print_label}",
-                                total_token_accuracy / batch_count,
-                                self._epoch)
-        self._writer.add_scalar(f"Mean visit token loss {print_label}",
-                                total_visit_token_loss / batch_count,
-                                self._epoch)
-        self._writer.add_scalar(f"Mean visit token accuracy {print_label}",
-                                total_visit_token_accuracy / batch_count,
-                                self._epoch)
+                # for learning_objective in self._learning_objectives:
+                #     learning_objective.report_performance_metrics(train, self._writer, self._epoch)
+                #     learning_objective.reset_performance_metrics()
+
+        for learning_objective in self._learning_objectives:
+            learning_objective.report_performance_metrics(train, self._writer, self._epoch)
 
     def train_model(self) -> None:
         logging.info("Performing computations on device: %s", self._device.type)
@@ -227,6 +193,12 @@ class ModelTrainer:
         }, file_name)
 
     def _load_checkpoint(self, epoch: Optional[int] = None) -> None:
+        """
+        Load the model from a checkpoint file. If no checkpoint file is found, the model will be initialized with
+        random weights.
+        Args:
+            epoch: A specific epoch to load. If None, the latest checkpoint will be loaded.
+        """
         if epoch is None:
             epoch = 0
             with os.scandir(self._settings.output_folder) as entries:
@@ -252,8 +224,6 @@ def main(args: List[str]):
         config.read_file(file)
     training_settings = TrainingSettings(config)
     model_trainer = ModelTrainer(settings=training_settings)
-    # Log config after initializing model_trainer so logger is initialized:
-    logger.log_config(config)
     model_trainer.train_model()
 
 

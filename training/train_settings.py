@@ -1,5 +1,7 @@
 from configparser import ConfigParser
 from dataclasses import dataclass
+from typing import Literal
+
 
 
 @dataclass
@@ -11,10 +13,13 @@ class TrainingSettings:
     # data preparation
     batch_size: int
     max_sequence_length: int
+    truncate_type: str
 
     # learning objectives
+    masked_concept_learning: bool
     mask_one_concept_per_visit: bool
     masked_visit_concept_learning: bool
+    label_prediction: bool
 
     # training
     do_evaluation: bool
@@ -38,9 +43,12 @@ class TrainingSettings:
 
         self.batch_size = config.getint("data preparation", "batch_size")
         self.max_sequence_length = config.getint("data preparation", "max_sequence_length")
+        self.truncate_type = config.get("data preparation", "truncate_type")
 
+        self.masked_concept_learning = config.getboolean("learning objectives", "masked_concept_learning")
         self.mask_one_concept_per_visit = config.getboolean("learning objectives", "mask_one_concept_per_visit")
         self.masked_visit_concept_learning = config.getboolean("learning objectives", "masked_visit_concept_learning")
+        self.label_prediction = config.getboolean("learning objectives", "label_prediction")
 
         self.do_evaluation = config.getboolean("training", "do_evaluation")
         self.train_fraction = config.getfloat("training", "train_fraction")

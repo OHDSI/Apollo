@@ -23,8 +23,11 @@ class ApolloDataset(data.IterableDataset):
     data. If the dataset is used across multiple workers, each worker will get a different subset of the data.
     """
 
-    def __init__(self, folder: str, data_transformer: Optional[ApolloDataTransformer] = None,
-                 train_test_split: float = 0.8, is_train: bool = True):
+    def __init__(self,
+                 folder: str,
+                 data_transformer: Optional[ApolloDataTransformer] = None,
+                 train_test_split: float = 0.8,
+                 is_train: bool = True):
         """
         Initialization
 

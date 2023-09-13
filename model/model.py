@@ -21,18 +21,20 @@ class TransformerModel(nn.Module):
         self.settings = settings
 
         # Embeddings:
-        self.token_embeddings = nn.Embedding(num_embeddings=tokenizer.get_vocab_size(),
-                                             embedding_dim=settings.hidden_size,
-                                             padding_idx=tokenizer.get_padding_token_id())
-        nn.init.xavier_uniform_(self.token_embeddings.weight)
-        self.position_embeddings = PositionalEmbedding(num_embeddings=settings.max_sequence_length,
-                                                       embedding_dim=settings.hidden_size)
-        self.age_embeddings = TimeEmbedding(embedding_dim=settings.hidden_size)
-        self.date_embeddings = TimeEmbedding(embedding_dim=settings.hidden_size)
-        self.segment_embeddings = nn.Embedding(num_embeddings=3,
-                                               embedding_dim=settings.hidden_size,
-                                               padding_idx=0)
-        if settings.masked_visit_concept_learning:
+        if settings.masked_concept_learning or settings.label_prediction:
+
+            self.token_embeddings = nn.Embedding(num_embeddings=tokenizer.get_vocab_size(),
+                                                 embedding_dim=settings.hidden_size,
+                                                 padding_idx=tokenizer.get_padding_token_id())
+            nn.init.xavier_uniform_(self.token_embeddings.weight)
+            self.position_embeddings = PositionalEmbedding(num_embeddings=settings.max_sequence_length,
+                                                           embedding_dim=settings.hidden_size)
+            self.age_embeddings = TimeEmbedding(embedding_dim=settings.hidden_size)
+            self.date_embeddings = TimeEmbedding(embedding_dim=settings.hidden_size)
+            self.segment_embeddings = nn.Embedding(num_embeddings=3,
+                                                   embedding_dim=settings.hidden_size,
+                                                   padding_idx=0)
+        if settings.masked_visit_concept_learning or settings.label_prediction:
             self.visit_token_embeddings = nn.Embedding(num_embeddings=visit_tokenizer.get_vocab_size(),
                                                        embedding_dim=settings.hidden_size,
                                                        padding_idx=visit_tokenizer.get_padding_token_id())
@@ -55,47 +57,63 @@ class TransformerModel(nn.Module):
                 nn.init.kaiming_uniform_(param)
 
         # Decoders:
-        self.masked_token_decoder = nn.Linear(in_features=settings.hidden_size,
-                                              out_features=tokenizer.get_vocab_size())
-        self.masked_token_decoder.bias.data.zero_()
-        nn.init.xavier_uniform_(self.masked_token_decoder.weight)
-        # Alternatively, decoder is shared with embedding layer:
-        # self.masked_token_decoder.weight = self.token_embeddings.weight
+        if settings.masked_concept_learning:
+            self.masked_token_decoder = nn.Linear(in_features=settings.hidden_size,
+                                                  out_features=tokenizer.get_vocab_size())
+            self.masked_token_decoder.bias.data.zero_()
+            nn.init.xavier_uniform_(self.masked_token_decoder.weight)
+            # Alternatively, decoder is shared with embedding layer:
+            # self.masked_token_decoder.weight = self.token_embeddings.weight
         if settings.masked_visit_concept_learning:
             self.masked_vist_token_decoder = nn.Linear(in_features=settings.hidden_size,
                                                        out_features=visit_tokenizer.get_vocab_size())
             self.masked_vist_token_decoder.bias.data.zero_()
             nn.init.xavier_uniform_(self.masked_vist_token_decoder.weight)
+        if settings.label_prediction:
+            self.label_decoder = nn.Linear(in_features=settings.hidden_size,
+                                           out_features=2)
+            self.label_decoder.bias.data.zero_()
+            nn.init.xavier_uniform_(self.label_decoder.weight)
 
     def forward(
             self,
             inputs: Dict[str, Tensor]
     ) -> Dict[str, Tensor]:
-        masked_token_ids = inputs[ModelInputNames.MASKED_TOKEN_IDS]
-        visit_concept_orders = inputs[ModelInputNames.VISIT_CONCEPT_ORDERS]
-        padding_mask = inputs[ModelInputNames.PADDING_MASK]
-        ages = inputs[ModelInputNames.AGES]
-        dates = inputs[ModelInputNames.DATES]
-        visit_segment = inputs[ModelInputNames.VISIT_SEGMENTS]
 
-        # Not sure about multiplication with the sqrt here, but it's in multiple BERT implementations:
-        embeddings = self.token_embeddings(masked_token_ids) * math.sqrt(self.token_embeddings.embedding_dim)
-        embeddings += self.age_embeddings(ages)
-        embeddings += self.date_embeddings(dates)
-        embeddings += self.segment_embeddings(visit_segment)
-        embeddings += self.position_embeddings(visit_concept_orders)
-
+        if self.settings.masked_concept_learning or self.settings.label_prediction:
+            if self.settings.masked_concept_learning:
+                token_ids = inputs[ModelInputNames.MASKED_TOKEN_IDS]
+            else:
+                token_ids = inputs[ModelInputNames.TOKEN_IDS]
+            # Not sure about multiplication with the sqrt here, but it's in multiple BERT implementations:
+            embeddings = self.token_embeddings(token_ids) * math.sqrt(self.token_embeddings.embedding_dim)
+            embeddings += self.age_embeddings(inputs[ModelInputNames.AGES])
+            embeddings += self.date_embeddings(inputs[ModelInputNames.DATES])
+            embeddings += self.segment_embeddings(inputs[ModelInputNames.VISIT_SEGMENTS])
+            embeddings += self.position_embeddings(inputs[ModelInputNames.VISIT_CONCEPT_ORDERS])
+        else:
+            embeddings = torch.Tensor()
         if self.settings.masked_visit_concept_learning:
             masked_visit_token_ids = inputs[ModelInputNames.MASKED_VISIT_TOKEN_IDS]
-            embeddings += self.visit_token_embeddings(masked_visit_token_ids) * math.sqrt(
+            visit_embeddings = self.visit_token_embeddings(masked_visit_token_ids) * math.sqrt(
                 self.visit_token_embeddings.embedding_dim)
+            if self.settings.masked_concept_learning or self.settings.label_prediction:
+                embeddings += visit_embeddings
+            else:
+                embeddings = visit_embeddings
+
         embeddings = self.layer_norm(embeddings)
         embeddings = self.dropout(embeddings)
 
-        encoded = self.transformer_encoder(src=embeddings, src_key_padding_mask=padding_mask)
+        encoded = self.transformer_encoder(src=embeddings, src_key_padding_mask=inputs[ModelInputNames.PADDING_MASK])
 
-        # No softmax here, as it's included in CrossEntropyLoss:
-        token_predictions = self.masked_token_decoder(encoded)
-        visit_token_predictions = self.masked_vist_token_decoder(encoded)
-        return {ModelOutputNames.TOKEN_PREDICTIONS: token_predictions,
-                ModelOutputNames.VISIT_TOKEN_PREDICTIONS: visit_token_predictions}
+        predictions = {}
+        if self.settings.masked_concept_learning:
+            # No softmax here, as it's included in CrossEntropyLoss:
+            predictions[ModelOutputNames.TOKEN_PREDICTIONS] = self.masked_token_decoder(encoded)
+        if self.settings.masked_visit_concept_learning:
+            # No softmax here, as it's included in CrossEntropyLoss:
+            predictions[ModelOutputNames.VISIT_TOKEN_PREDICTIONS] = self.masked_vist_token_decoder(encoded)
+        if self.settings.label_prediction:
+            predictions[ModelOutputNames.LABEL_PREDICTIONS] = self.label_decoder(encoded[:, 0, :])
+        return predictions
