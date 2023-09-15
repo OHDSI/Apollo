@@ -9,7 +9,7 @@ import torch
 from torch import optim
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from accelerate import Accelerator, DistributedDataParallelKwargs
+from accelerate import Accelerator
 
 import utils.logger as logger
 from training.train_settings import TrainingSettings
@@ -80,8 +80,7 @@ class ModelTrainer:
         self._optimizer = optim.Adam(params=self._model.parameters(),
                                      lr=settings.learning_rate,
                                      weight_decay=settings.weight_decay)
-        ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
-        self._accelerator = Accelerator(kwargs_handlers=[ddp_kwargs])
+        self._accelerator = Accelerator()
         self._model, self._optimizer, self._train_data_loader, self._test_data_loader = self._accelerator.prepare(
             self._model, self._optimizer, self._train_data_loader, self._test_data_loader)
         self._epoch = 0
