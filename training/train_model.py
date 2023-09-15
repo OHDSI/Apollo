@@ -3,15 +3,15 @@ import logging
 import os
 import sys
 import time
-from typing import List, Dict, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import torch
 from torch import optim
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+from accelerate import Accelerator
 
 import utils.logger as logger
-
 from training.train_settings import TrainingSettings
 from data_loading.dataset import ApolloDataset
 from data_loading.data_transformer import ApolloDataTransformer
@@ -26,8 +26,8 @@ CONCEPT_TOKENIZER_FILE_NAME = "_concept_tokenizer.json"
 VISIT_CONCEPT_TOKENIZER_FILE_NAME = "_visit_concept_tokenizer.json"
 
 
-def _dict_to_device(data: Dict[str, torch.Tensor], device: torch.device) -> Dict[str, torch.Tensor]:
-    return {key: value.to(device, non_blocking=True) for key, value in data.items()}
+# def _dict_to_device(data: Dict[str, torch.Tensor], device: torch.device) -> Dict[str, torch.Tensor]:
+#     return {key: value.to(device, non_blocking=True) for key, value in data.items()}
 
 
 def _find_latest_checkpoint(folder: str) -> Optional[str]:
@@ -70,14 +70,19 @@ class ModelTrainer:
                 concept_tokenizer=self._concept_tokenizer,
                 visit_tokenizer=self._visit_concept_tokenizer))
         self._train_data, self._test_data = self._get_data_sets()
-        self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self._train_data_loader = DataLoader(dataset=self._train_data,
+                                             batch_size=self._settings.batch_size)
+        self._test_data_loader = DataLoader(dataset=self._test_data,
+                                            batch_size=self._settings.batch_size)
         self._model = TransformerModel(settings=self._settings,
                                        tokenizer=self._concept_tokenizer,
                                        visit_tokenizer=self._visit_concept_tokenizer)
-        self._model.to(self._device)
         self._optimizer = optim.Adam(params=self._model.parameters(),
                                      lr=settings.learning_rate,
                                      weight_decay=settings.weight_decay)
+        self._accelerator = Accelerator()
+        self._model, self._optimizer, self._train_data, self._test_data = self._accelerator.prepare(
+           [self._model, self._optimizer, self._train_data_loader, self._test_data_loader])
         self._epoch = 0
 
     def _configure_logger(self) -> None:
@@ -128,25 +133,20 @@ class ModelTrainer:
         """
         if train:
             self._model.train()
-            dataset = self._train_data
+            data_loader = self._train_data_loader
         else:
             self._model.eval()
-            dataset = self._test_data
+            data_loader = self._test_data_loader
             # Not applying no_grad() as a workaround for https://github.com/pytorch/pytorch/issues/97111
         for learning_objective in self._learning_objectives:
             learning_objective.reset_performance_metrics()
         batch_count = 0
         start_time = time.time()
-        data_loader = DataLoader(dataset=dataset,
-                                 batch_size=self._settings.batch_size,
-                                 num_workers=4,
-                                 pin_memory=True)
+
         for inputs, outputs in data_loader:
             batch_count += 1
             # for batch_count in range(1, 1000):
 
-            inputs = _dict_to_device(inputs, self._device)
-            outputs = _dict_to_device(outputs, self._device)
             predictions = self._model(inputs)
 
             loss = 0.0
@@ -162,7 +162,7 @@ class ModelTrainer:
 
             if train:
                 self._optimizer.zero_grad()
-                loss.backward()
+                self._accelerator.backward(loss)
                 self._optimizer.step()
 
                 if batch_count % BATCH_REPORT_INTERVAL == 0:
@@ -179,7 +179,7 @@ class ModelTrainer:
             learning_objective.report_performance_metrics(train, self._writer, self._epoch)
 
     def train_model(self) -> None:
-        logging.info("Performing computations on device: %s", self._device.type)
+        # logging.info("Performing computations on device: %s", self._device.type)
         logging.info("Total parameters: {:,} ".format(sum([param.nelement() for param in self._model.parameters()])))
         self._load_checkpoint()
         start = self._epoch + 1
@@ -205,7 +205,8 @@ class ModelTrainer:
         }, file_name)
 
     def _load_model(self, file_name: str, pretrained: bool = False) -> None:
-        loaded = torch.load(file_name, map_location=self._device)
+        # loaded = torch.load(file_name, map_location=self._device)
+        loaded = torch.load(file_name)
         self._model.load_state_dict(loaded["model_state_dict"], strict=not pretrained)
         if not pretrained:
             self._optimizer.load_state_dict(loaded["optimizer_state_dict"])
