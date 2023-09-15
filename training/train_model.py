@@ -9,7 +9,7 @@ import torch
 from torch import optim
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from accelerate import Accelerator
+from accelerate import Accelerator, DistributedDataParallelKwargs
 
 import utils.logger as logger
 from training.train_settings import TrainingSettings
@@ -80,7 +80,8 @@ class ModelTrainer:
         self._optimizer = optim.Adam(params=self._model.parameters(),
                                      lr=settings.learning_rate,
                                      weight_decay=settings.weight_decay)
-        self._accelerator = Accelerator()
+        ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
+        self._accelerator = Accelerator(kwargs_handlers=[ddp_kwargs])
         self._model, self._optimizer, self._train_data_loader, self._test_data_loader = self._accelerator.prepare(
             self._model, self._optimizer, self._train_data_loader, self._test_data_loader)
         self._epoch = 0
@@ -163,6 +164,11 @@ class ModelTrainer:
             if train:
                 self._optimizer.zero_grad()
                 self._accelerator.backward(loss)
+
+                for name, param in self._model.named_parameters():
+                    if param.grad is None:
+                        logging.info("Parameter %s has no gradient", name)
+
                 self._optimizer.step()
 
                 if batch_count % BATCH_REPORT_INTERVAL == 0:
