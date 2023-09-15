@@ -81,8 +81,8 @@ class ModelTrainer:
                                      lr=settings.learning_rate,
                                      weight_decay=settings.weight_decay)
         self._accelerator = Accelerator()
-        self._model, self._optimizer, self._train_data, self._test_data = self._accelerator.prepare(
-           [self._model, self._optimizer, self._train_data_loader, self._test_data_loader])
+        self._model, self._optimizer, self._train_data_loader, self._test_data_loader = self._accelerator.prepare(
+            self._model, self._optimizer, self._train_data_loader, self._test_data_loader)
         self._epoch = 0
 
     def _configure_logger(self) -> None:
