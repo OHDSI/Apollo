@@ -23,7 +23,7 @@ from model.model import TransformerModel
 # Inspired by https://pytorch.org/tutorials/beginner/transformer_tutorial.html
 
 LOGGER_FILE_NAME = "_model_training_log.txt"
-BATCH_REPORT_INTERVAL = 10
+BATCH_REPORT_INTERVAL = 1000
 
 
 def _dict_to_device(data: Dict[str, torch.Tensor], device: torch.device) -> Dict[str, torch.Tensor]:
@@ -134,7 +134,7 @@ class ModelTrainer:
         start_time = time.time()
         data_loader = DataLoader(dataset=dataset,
                                  batch_size=self._settings.batch_size,
-                                 num_workers=1)
+                                 num_workers=4)
         for inputs, outputs in data_loader:
             batch_count += 1
             # for batch_count in range(1, 1000):
@@ -161,7 +161,7 @@ class ModelTrainer:
 
                 if batch_count % BATCH_REPORT_INTERVAL == 0:
                     elapsed = time.time() - start_time
-                    logging.info("Batches completed: %d, average time per batch: %s",
+                    logging.info("- Batches completed: %d, average time per batch: %s",
                                  batch_count,
                                  elapsed / batch_count)
 
@@ -208,7 +208,7 @@ class ModelTrainer:
                         if new_epoch > epoch:
                             epoch = new_epoch
         if epoch == 0:
-            logging.info("No checkpoint found, starting with clean model")
+            logging.info("No checkpoint found, starting with random weights")
         else:
             file_name = os.path.join(self._settings.output_folder, f"checkpoint_{epoch:03d}.pth")
             logging.info("Loading model from '%s'", file_name)

@@ -27,7 +27,8 @@ class TestDataGenerating(unittest.TestCase):
                 "visit_concept_orders": [np.array([1, 1, 1, 1, 2, 2, 2, 2], dtype=np.int32)],
                 "num_of_concepts": [8],
                 "num_of_visits": [2],
-                "visit_concept_ids": [np.array(["9202", "9202", "9202", "9202", "0", "9202", "9202", "9202"], dtype=str)],
+                "visit_concept_ids": [np.array(["9202", "9202", "9202", "9202", "0", "9202", "9202", "9202"],
+                                               dtype=str)],
             }
         )
         pa.parquet.write_table(row, os.path.join(self.parquet_folder, "test.parquet"))
@@ -55,8 +56,7 @@ class TestDataGenerating(unittest.TestCase):
         assert row_count == 1
 
     def test_concept_tokenizer(self):
-        data = parquet_data_iterator.ParquetDataIterator([os.path.join(self.parquet_folder, "test.parquet")], None)
-        ds = dataset.ApolloDataset(folder = self.parquet_folder, train_test_split=1, is_train=True)
+        ds = dataset.ApolloDataset(folder=self.parquet_folder, train_test_split=1, is_train=True)
         concept_tokenizer = tokenizer.ConceptTokenizer()
         concept_tokenizer.fit_on_concept_sequences(ds, "concept_ids")
         assert concept_tokenizer.encode(np.array([tokenizer.OUT_OF_VOCABULARY_TOKEN])) == \
@@ -83,16 +83,16 @@ class TestDataGenerating(unittest.TestCase):
         concept_tokenizer.fit_on_concept_sequences(ds, "concept_ids")
         visit_concept_tokenizer = tokenizer.ConceptTokenizer()
         visit_concept_tokenizer.fit_on_concept_sequences(ds, "visit_concept_ids")
-        learning_objectives = [learning_objective.MaskedConceptLearningObjective(concept_tokenizer),
-                               learning_objective.MaskedVisitConceptLearningObjective(visit_concept_tokenizer)]
-        dt = data_transformer.ApolloDataTransformer(learning_objectives)
+        learning_objectives_ = [learning_objectives.MaskedConceptLearningObjective(concept_tokenizer),
+                                learning_objectives.MaskedVisitConceptLearningObjective(visit_concept_tokenizer)]
+        dt = data_transformer.ApolloDataTransformer(learning_objectives_)
         ds = dataset.ApolloDataset(folder=self.parquet_folder,
                                    data_transformer=dt,
                                    train_test_split=1,
                                    is_train=True)
         data_loader = DataLoader(ds, batch_size=1)
         batch_count = 0
-        for inpputs, outputs in data_loader:
+        for inputs, outputs in data_loader:
             # TODO: add some specific tests on output
             batch_count += 1
             break

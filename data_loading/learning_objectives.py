@@ -156,7 +156,7 @@ class MaskedConceptLearningObjective(LearningObjective):
         """
         self._tokenizer = concept_tokenizer
         self._one_mask_per_visit = one_mask_per_visit
-        self._criterion = torch.nn.CrossEntropyLoss()
+        self._criterion = torch.nn.CrossEntropyLoss(ignore_index=IGNORE_INDEX)
         self._performance = TokenPredictionPerformance()
 
     def process_row(self, row: Dict, start_index: int, end_index: int, max_sequence_length: int) -> tuple[Dict, Dict]:
@@ -268,7 +268,7 @@ class MaskedVisitConceptLearningObjective(LearningObjective):
             visit_concept_tokenizer: The tokenizer to use to tokenize the visit concepts.
         """
         self._tokenizer = visit_concept_tokenizer
-        self._criterion = torch.nn.CrossEntropyLoss()
+        self._criterion = torch.nn.CrossEntropyLoss(ignore_index=IGNORE_INDEX)
         self._performance = TokenPredictionPerformance()
 
     def process_row(self, row: Dict, start_index: int, end_index: int, max_sequence_length: int) -> tuple[Dict, Dict]:
