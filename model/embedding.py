@@ -48,5 +48,6 @@ class TimeEmbedding(nn.Module):
         part0 = (self.w0 * tau) + self.b0
         # Probably a nicer way to do this using broadcasting:
         part1 = self.f(tau.unsqueeze(-1).expand(-1, -1, self.embedding_dim - 1) *
-                       self.w.unsqueeze(0).expand(tau.shape[0], tau.shape[1], -1))
+                       self.w.unsqueeze(0).expand(tau.shape[0], tau.shape[1], -1) +
+                       self.b.unsqueeze(0).expand(tau.shape[0], tau.shape[1], -1))
         return torch.cat([part0.unsqueeze(-1), part1], -1)
