@@ -94,7 +94,7 @@ class ModelTrainer:
                 logging.info("Loading concept tokenizer for %s from %s", field_name, json_file)
                 concept_tokenizer = tokenizer.load_from_json(json_file)
             else:
-                logging.info("Creating concept tokenizer")
+                logging.info("Creating concept tokenizer for %s", field_name)
                 concept_tokenizer = tokenizer.ConceptTokenizer()
                 train_data = ApolloDataset(self._settings.sequence_data_folder, is_train=True)
                 concept_tokenizer.fit_on_concept_sequences(train_data, field_name)
