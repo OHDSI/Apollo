@@ -1,7 +1,6 @@
 from configparser import ConfigParser
 from dataclasses import dataclass
-from typing import Literal
-
+from typing import Literal, Optional
 
 
 @dataclass
@@ -9,6 +8,7 @@ class TrainingSettings:
     # system
     sequence_data_folder: str
     output_folder: str
+    pretrained_model_folder: Optional[str]
 
     # data preparation
     batch_size: int
@@ -25,6 +25,7 @@ class TrainingSettings:
     do_evaluation: bool
     train_fraction: float
     num_epochs: int
+    num_freeze_epochs: int
     learning_rate: float
     weight_decay: float
 
@@ -40,6 +41,9 @@ class TrainingSettings:
     def __init__(self, config: ConfigParser):
         self.sequence_data_folder = config.get("system", "sequence_data_folder")
         self.output_folder = config.get("system", "output_folder")
+        self.pretrained_model_folder = config.get("system", "pretrained_model_folder")
+        if self.pretrained_model_folder.strip() == "":
+            self.pretrained_model_folder = None
 
         self.batch_size = config.getint("data preparation", "batch_size")
         self.max_sequence_length = config.getint("data preparation", "max_sequence_length")
@@ -53,6 +57,7 @@ class TrainingSettings:
         self.do_evaluation = config.getboolean("training", "do_evaluation")
         self.train_fraction = config.getfloat("training", "train_fraction")
         self.num_epochs = config.getint("training", "num_epochs")
+        self.num_freeze_epochs = config.getint("training", "num_freeze_epochs")
         self.learning_rate = config.getfloat("training", "learning_rate")
         self.weight_decay = config.getfloat("training", "weight_decay")
 

@@ -19,6 +19,7 @@ class TransformerModel(nn.Module):
                  visit_tokenizer: ConceptTokenizer):
         super().__init__()
         self.settings = settings
+        self._frozen = False
 
         # Embeddings:
         if settings.masked_concept_learning or settings.label_prediction:
@@ -117,3 +118,20 @@ class TransformerModel(nn.Module):
         if self.settings.label_prediction:
             predictions[ModelOutputNames.LABEL_PREDICTIONS] = self.label_decoder(encoded[:, 0, :])
         return predictions
+
+    def freeze_non_head(self):
+        """Freeze all parameters except the head layers."""
+        for name, param in self.named_parameters():
+            if 'masked_token_decoder' in name or 'masked_vist_token_decoder' in name or 'label_decoder' in name:
+                continue
+            param.requires_grad = False
+        self._frozen = True
+
+    def unfreeze_all(self):
+        """Unfreeze all parameters."""
+        for param in self.parameters():
+            param.requires_grad = True
+        self._frozen = False
+
+    def is_frozen(self):
+        return self._frozen
