@@ -6,7 +6,7 @@ import time
 from typing import List, Dict, Optional, Tuple
 
 import torch
-from torch import nn, optim
+from torch import optim
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
@@ -17,7 +17,7 @@ from data_loading.dataset import ApolloDataset
 from data_loading.data_transformer import ApolloDataTransformer
 import data_loading.learning_objectives as learning_objectives
 import data_loading.tokenizer as tokenizer
-from data_loading.variable_names import DataNames, ModelInputNames, ModelOutputNames
+from data_loading.variable_names import DataNames
 from model.model import TransformerModel
 
 # Inspired by https://pytorch.org/tutorials/beginner/transformer_tutorial.html
@@ -27,7 +27,7 @@ BATCH_REPORT_INTERVAL = 1000
 
 
 def _dict_to_device(data: Dict[str, torch.Tensor], device: torch.device) -> Dict[str, torch.Tensor]:
-    return {key: value.to(device) for key, value in data.items()}
+    return {key: value.to(device, non_blocking=True) for key, value in data.items()}
 
 
 class ModelTrainer:
@@ -122,11 +122,9 @@ class ModelTrainer:
         if train:
             self._model.train()
             dataset = self._train_data
-            print_label = "train"
         else:
             self._model.eval()
             dataset = self._test_data
-            print_label = "tests"
             # Not applying no_grad() as a workaround for https://github.com/pytorch/pytorch/issues/97111
         for learning_objective in self._learning_objectives:
             learning_objective.reset_performance_metrics()
@@ -134,7 +132,8 @@ class ModelTrainer:
         start_time = time.time()
         data_loader = DataLoader(dataset=dataset,
                                  batch_size=self._settings.batch_size,
-                                 num_workers=4)
+                                 num_workers=4,
+                                 pin_memory=True)
         for inputs, outputs in data_loader:
             batch_count += 1
             # for batch_count in range(1, 1000):
