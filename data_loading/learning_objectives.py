@@ -5,7 +5,7 @@ from typing import Dict
 
 import numpy as np
 import torch
-from torch.utils.tensorboard import SummaryWriter
+from accelerate import Accelerator
 
 from data_loading.tokenizer import ConceptTokenizer
 from data_loading.variable_names import ModelInputNames, DataNames, ModelOutputNames
@@ -61,7 +61,7 @@ class TokenPredictionPerformance:
     def get_mean_accuracy(self) -> float:
         return self.sum_accuracy / self.n
 
-    def report_metrics(self, train: bool, objective_label: str, writer, epoch) -> None:
+    def report_metrics(self, train: bool, objective_label: str, accelerator: Accelerator, epoch: int) -> None:
         label = "train" if train else "validation"
         label += " " + objective_label
         logging.info("Epoch %d %s mean loss: %0.2f, mean accuracy: %0.2f%%",
@@ -69,12 +69,9 @@ class TokenPredictionPerformance:
                      label,
                      self.get_mean_loss(),
                      100 * self.get_mean_accuracy())
-        writer.add_scalar(f"{label} mean loss",
-                          self.get_mean_loss(),
-                          epoch)
-        writer.add_scalar(f"{label} mean accuracy",
-                          self.get_mean_accuracy(),
-                          epoch)
+        performance = {f"{label} mean loss": self.get_mean_loss(),
+                       f"{label} mean accuracy": self.get_mean_accuracy()}
+        accelerator.log(performance, step=epoch)
 
 
 def _masked_token_accuracy(token_predictions: torch.Tensor, token_ids: torch.Tensor) -> float:
@@ -128,13 +125,13 @@ class LearningObjective(ABC):
         pass
 
     @abstractmethod
-    def report_performance_metrics(self, train: bool, writer: SummaryWriter, epoch: int) -> None:
+    def report_performance_metrics(self, train: bool, accelerator: Accelerator, epoch: int) -> None:
         """
         Report the performance metrics.
         Args:
             train: If true, the performance metrics are for the training set. Otherwise, they are for the validation
                 set.
-            writer: The tensorboard writer to use to write the performance metrics.
+            accelerator: The accelerator to use for logging.
             epoch: The epoch number.
         """
         pass
@@ -255,8 +252,8 @@ class MaskedConceptLearningObjective(LearningObjective):
     def reset_performance_metrics(self) -> None:
         self._performance.reset()
 
-    def report_performance_metrics(self, train: bool, writer: SummaryWriter, epoch: int) -> None:
-        self._performance.report_metrics(train, "masked concept", writer, epoch)
+    def report_performance_metrics(self, train: bool, accelerator: Accelerator, epoch: int) -> None:
+        self._performance.report_metrics(train, "masked concept", accelerator, epoch)
 
 
 class MaskedVisitConceptLearningObjective(LearningObjective):
@@ -328,8 +325,8 @@ class MaskedVisitConceptLearningObjective(LearningObjective):
     def reset_performance_metrics(self) -> None:
         self._performance.reset()
 
-    def report_performance_metrics(self, train: bool, writer: SummaryWriter, epoch: int) -> None:
-        self._performance.report_metrics(train, "masked visit", writer, epoch)
+    def report_performance_metrics(self, train: bool, accelerator: Accelerator, epoch: int) -> None:
+        self._performance.report_metrics(train, "masked visit", accelerator, epoch)
 
 
 class LabelPredictionLearningObjective(LearningObjective):
@@ -421,5 +418,5 @@ class LabelPredictionLearningObjective(LearningObjective):
     def reset_performance_metrics(self) -> None:
         self._performance.reset()
 
-    def report_performance_metrics(self, train: bool, writer: SummaryWriter, epoch: int) -> None:
-        self._performance.report_metrics(train, "label prediction", writer, epoch)
+    def report_performance_metrics(self, train: bool, accelerator: Accelerator, epoch: int) -> None:
+        self._performance.report_metrics(train, "label prediction", accelerator, epoch)

@@ -6,9 +6,9 @@ import time
 from typing import List, Optional, Tuple
 
 import torch
+from accelerate.utils import LoggerType
 from torch import optim
 from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
 from accelerate import Accelerator
 
 import utils.logger as logger
@@ -24,10 +24,6 @@ LOGGER_FILE_NAME = "_model_training_log.txt"
 BATCH_REPORT_INTERVAL = 1000
 CONCEPT_TOKENIZER_FILE_NAME = "_concept_tokenizer.json"
 VISIT_CONCEPT_TOKENIZER_FILE_NAME = "_visit_concept_tokenizer.json"
-
-
-# def _dict_to_device(data: Dict[str, torch.Tensor], device: torch.device) -> Dict[str, torch.Tensor]:
-#     return {key: value.to(device, non_blocking=True) for key, value in data.items()}
 
 
 def _find_latest_checkpoint(folder: str) -> Optional[str]:
@@ -50,13 +46,18 @@ class ModelTrainer:
         self._settings = settings
         os.makedirs(settings.output_folder, exist_ok=True)
         self._configure_logger()
-        logger.log_settings(settings)
-        self._writer = SummaryWriter(settings.output_folder)
-        self._concept_tokenizer = self._get_concept_tokenizer(file_name=CONCEPT_TOKENIZER_FILE_NAME,
-                                                              field_name=DataNames.CONCEPT_IDS)
-        if settings.masked_visit_concept_learning or settings.label_prediction:
-            self._visit_concept_tokenizer = self._get_concept_tokenizer(file_name=VISIT_CONCEPT_TOKENIZER_FILE_NAME,
-                                                                        field_name=DataNames.VISIT_CONCEPT_IDS)
+        self._accelerator = Accelerator(project_dir=settings.output_folder, log_with=LoggerType.TENSORBOARD)
+        self._accelerator.init_trackers("Apollo")
+        if self._accelerator.is_main_process:
+            logger.log_settings(settings)
+        # Initialize concept tokenizers:
+        with self._accelerator.main_process_first():
+            self._concept_tokenizer = self._get_concept_tokenizer(file_name=CONCEPT_TOKENIZER_FILE_NAME,
+                                                                  field_name=DataNames.CONCEPT_IDS)
+            if settings.masked_visit_concept_learning or settings.label_prediction:
+                self._visit_concept_tokenizer = self._get_concept_tokenizer(file_name=VISIT_CONCEPT_TOKENIZER_FILE_NAME,
+                                                                            field_name=DataNames.VISIT_CONCEPT_IDS)
+        # Initialize learning objectives:
         self._learning_objectives = []
         if settings.masked_concept_learning:
             self._learning_objectives.append(learning_objectives.MaskedConceptLearningObjective(
@@ -69,18 +70,20 @@ class ModelTrainer:
             self._learning_objectives.append(learning_objectives.LabelPredictionLearningObjective(
                 concept_tokenizer=self._concept_tokenizer,
                 visit_tokenizer=self._visit_concept_tokenizer))
-        self._train_data, self._test_data = self._get_data_sets()
-        self._train_data_loader = DataLoader(dataset=self._train_data,
-                                             batch_size=self._settings.batch_size)
-        self._test_data_loader = DataLoader(dataset=self._test_data,
-                                            batch_size=self._settings.batch_size)
+        # Initialize data sets and data loaders:
+        with self._accelerator.main_process_first():
+            self._train_data, self._test_data = self._get_data_sets()
+            self._train_data_loader = DataLoader(dataset=self._train_data,
+                                                 batch_size=self._settings.batch_size)
+            self._test_data_loader = DataLoader(dataset=self._test_data,
+                                                batch_size=self._settings.batch_size)
+        # Initialize model and optimizer:
         self._model = TransformerModel(settings=self._settings,
                                        tokenizer=self._concept_tokenizer,
                                        visit_tokenizer=self._visit_concept_tokenizer)
         self._optimizer = optim.Adam(params=self._model.parameters(),
                                      lr=settings.learning_rate,
                                      weight_decay=settings.weight_decay)
-        self._accelerator = Accelerator()
         self._model, self._optimizer, self._train_data_loader, self._test_data_loader = self._accelerator.prepare(
             self._model, self._optimizer, self._train_data_loader, self._test_data_loader)
         self._epoch = 0
@@ -142,7 +145,6 @@ class ModelTrainer:
             learning_objective.reset_performance_metrics()
         batch_count = 0
         start_time = time.time()
-
         for inputs, outputs in data_loader:
             batch_count += 1
             # for batch_count in range(1, 1000):
@@ -163,11 +165,6 @@ class ModelTrainer:
             if train:
                 self._optimizer.zero_grad()
                 self._accelerator.backward(loss)
-
-                for name, param in self._model.named_parameters():
-                    if param.grad is None:
-                        logging.info("Parameter %s has no gradient", name)
-
                 self._optimizer.step()
 
                 if batch_count % BATCH_REPORT_INTERVAL == 0:
@@ -176,15 +173,11 @@ class ModelTrainer:
                                  batch_count,
                                  elapsed / batch_count)
 
-                # for learning_objective in self._learning_objectives:
-                #     learning_objective.report_performance_metrics(train, self._writer, self._epoch)
-                #     learning_objective.reset_performance_metrics()
-
-        for learning_objective in self._learning_objectives:
-            learning_objective.report_performance_metrics(train, self._writer, self._epoch)
+        if self._accelerator.is_main_process:
+            for learning_objective in self._learning_objectives:
+                learning_objective.report_performance_metrics(train, self._accelerator, self._epoch)
 
     def train_model(self) -> None:
-        # logging.info("Performing computations on device: %s", self._device.type)
         logging.info("Total parameters: {:,} ".format(sum([param.nelement() for param in self._model.parameters()])))
         self._load_checkpoint()
         start = self._epoch + 1
@@ -200,17 +193,19 @@ class ModelTrainer:
             if self._model.is_frozen() and self._epoch >= self._settings.num_freeze_epochs:
                 logging.info("Unfreezing pre-trained model weights")
                 self._model.unfreeze_all()
+        self._accelerator.end_training()
 
     def _save_checkpoint(self):
         file_name = os.path.join(self._settings.output_folder, f"checkpoint_{self._epoch:03d}.pth")
+        self._accelerator.wait_for_everyone()
+        model = self._accelerator.unwrap_model(self._model)
         torch.save({
             'epoch': self._epoch,
-            'model_state_dict': self._model.state_dict(),
+            'model_state_dict': model.state_dict(),
             'optimizer_state_dict': self._optimizer.state_dict(),
         }, file_name)
 
     def _load_model(self, file_name: str, pretrained: bool = False) -> None:
-        # loaded = torch.load(file_name, map_location=self._device)
         loaded = torch.load(file_name)
         self._model.load_state_dict(loaded["model_state_dict"], strict=not pretrained)
         if not pretrained:

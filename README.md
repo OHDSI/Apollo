@@ -34,7 +34,7 @@ For testing purposes, we can simulate CDM data using a built-in simulator:
 
 2. Run:
 
-    ```python
+    ```
 	python simulating/simulator.py simulator.ini
 	```
    
@@ -52,7 +52,7 @@ In both 'train' and 'test' folders, subfolders will be generated for each simula
 
 2. Run:
 
-    ```python
+    ```
 	python cdm_processing/cdm_processor.py cdm_processor.ini
 	```
 
@@ -62,9 +62,15 @@ In both 'train' and 'test' folders, subfolders will be generated for each simula
 
 2. Run:
 
-    ```python
+    ```
 	python training/train_model.py model_trainer.ini
 	```
+     
+	When using multiple GPUs (the number of processes should be equal to the number of GPUs):
+	```
+	PYTHONPATH=./: accelerate launch --num_processes 4 --multi_gpu training/train_model.py model_trainer.ini
+	```
+
 
 ## License
 
