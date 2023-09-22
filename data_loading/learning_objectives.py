@@ -32,9 +32,9 @@ def _prefix_and_pad(sequence: np.ndarray[any],
     """
     n_to_pad = max_sequence_length - len(sequence) - 1  # Subtract one for the prefix
     if n_to_pad > 0:
-        sequence = np.concatenate(([prefix_value], sequence, [padding_value] * n_to_pad))
+        sequence = np.concatenate(([prefix_value], sequence, [padding_value] * n_to_pad), dtype=sequence.dtype)
     else:
-        sequence = np.concatenate(([prefix_value], sequence))
+        sequence = np.concatenate(([prefix_value], sequence), dtype=sequence.dtype)
     return sequence
 
 

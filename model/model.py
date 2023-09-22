@@ -22,24 +22,34 @@ class TransformerModel(nn.Module):
         self._frozen = False
 
         # Embeddings:
+        embeddings_total_dim = 0
         if settings.masked_concept_learning or settings.label_prediction:
-
             self.token_embeddings = nn.Embedding(num_embeddings=tokenizer.get_vocab_size(),
                                                  embedding_dim=settings.hidden_size,
                                                  padding_idx=tokenizer.get_padding_token_id())
             nn.init.xavier_uniform_(self.token_embeddings.weight)
+            embeddings_total_dim += settings.hidden_size
             self.position_embeddings = PositionalEmbedding(num_embeddings=settings.max_sequence_length,
                                                            embedding_dim=settings.hidden_size)
+            embeddings_total_dim += settings.hidden_size
             self.age_embeddings = TimeEmbedding(embedding_dim=settings.hidden_size)
+            embeddings_total_dim += settings.hidden_size
             self.date_embeddings = TimeEmbedding(embedding_dim=settings.hidden_size)
+            embeddings_total_dim += settings.hidden_size
             self.segment_embeddings = nn.Embedding(num_embeddings=3,
                                                    embedding_dim=settings.hidden_size,
                                                    padding_idx=0)
+            embeddings_total_dim += settings.hidden_size
         if settings.masked_visit_concept_learning or settings.label_prediction:
             self.visit_token_embeddings = nn.Embedding(num_embeddings=visit_tokenizer.get_vocab_size(),
                                                        embedding_dim=settings.hidden_size,
                                                        padding_idx=visit_tokenizer.get_padding_token_id())
             nn.init.xavier_uniform_(self.visit_token_embeddings.weight)
+            embeddings_total_dim += settings.hidden_size
+        if settings.embedding_combination_method == "concat":
+            self.embedding_concat_rescale_layer = nn.Linear(in_features=embeddings_total_dim,
+                                                            out_features=settings.hidden_size)
+
         self.layer_norm = nn.LayerNorm(normalized_shape=settings.hidden_size)
         self.dropout = nn.Dropout(settings.hidden_dropout_prob)
 
@@ -81,27 +91,30 @@ class TransformerModel(nn.Module):
             inputs: Dict[str, Tensor]
     ) -> Dict[str, Tensor]:
 
+        embeddings = []
         if self.settings.masked_concept_learning or self.settings.label_prediction:
             if self.settings.masked_concept_learning:
                 token_ids = inputs[ModelInputNames.MASKED_TOKEN_IDS]
             else:
                 token_ids = inputs[ModelInputNames.TOKEN_IDS]
             # Not sure about multiplication with the sqrt here, but it's in multiple BERT implementations:
-            embeddings = self.token_embeddings(token_ids) * math.sqrt(self.token_embeddings.embedding_dim)
-            embeddings += self.age_embeddings(inputs[ModelInputNames.AGES])
-            embeddings += self.date_embeddings(inputs[ModelInputNames.DATES])
-            embeddings += self.segment_embeddings(inputs[ModelInputNames.VISIT_SEGMENTS])
-            embeddings += self.position_embeddings(inputs[ModelInputNames.VISIT_CONCEPT_ORDERS])
-        else:
-            embeddings = torch.Tensor()
+            embeddings.append(self.token_embeddings(token_ids) * math.sqrt(self.token_embeddings.embedding_dim))
+            embeddings.append(self.age_embeddings(inputs[ModelInputNames.AGES]))
+            embeddings.append(self.date_embeddings(inputs[ModelInputNames.DATES]))
+            embeddings.append(self.segment_embeddings(inputs[ModelInputNames.VISIT_SEGMENTS]))
+            embeddings.append(self.position_embeddings(inputs[ModelInputNames.VISIT_CONCEPT_ORDERS]))
         if self.settings.masked_visit_concept_learning:
             masked_visit_token_ids = inputs[ModelInputNames.MASKED_VISIT_TOKEN_IDS]
             visit_embeddings = self.visit_token_embeddings(masked_visit_token_ids) * math.sqrt(
                 self.visit_token_embeddings.embedding_dim)
-            if self.settings.masked_concept_learning or self.settings.label_prediction:
-                embeddings += visit_embeddings
-            else:
-                embeddings = visit_embeddings
+            embeddings.append(visit_embeddings)
+
+        if self.settings.embedding_combination_method == "concat":
+            embeddings = torch.cat(embeddings, dim=-1)
+            embeddings = self.embedding_concat_rescale_layer(embeddings)
+            embeddings = torch.tanh(embeddings)
+        elif self.settings.embedding_combination_method == "sum":
+            embeddings = torch.stack(embeddings, dim=0).sum(dim=0)
 
         embeddings = self.layer_norm(embeddings)
         embeddings = self.dropout(embeddings)

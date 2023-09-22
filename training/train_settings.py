@@ -1,6 +1,6 @@
 from configparser import ConfigParser
 from dataclasses import dataclass
-from typing import Literal, Optional
+from typing import Optional
 
 
 @dataclass
@@ -35,6 +35,7 @@ class TrainingSettings:
     num_hidden_layers: int
     intermediate_size: int
     hidden_act: str
+    embedding_combination_method: str
     hidden_dropout_prob: float
     attention_probs_dropout_prob: float
 
@@ -66,5 +67,15 @@ class TrainingSettings:
         self.num_hidden_layers = config.getint("model", "num_hidden_layers")
         self.intermediate_size = config.getint("model", "intermediate_size")
         self.hidden_act = config.get("model", "hidden_act")
+        self.embedding_combination_method = config.get("model", "embedding_combination_method")
         self.hidden_dropout_prob = config.getfloat("model", "hidden_dropout_prob")
         self.attention_probs_dropout_prob = config.getfloat("model", "attention_probs_dropout_prob")
+        self._validate()
+
+    def _validate(self):
+        if self.truncate_type not in ["random", "tail"]:
+            raise ValueError(f"Invalid truncate_type: {self.truncate_type}")
+        if self.hidden_act not in ["relu", "gelu"]:
+            raise ValueError(f"Invalid hidden_act: {self.hidden_act}")
+        if self.embedding_combination_method not in ["concat", "sum"]:
+            raise ValueError(f"Invalid embedding_combination_method: {self.embedding_combination_method}")
