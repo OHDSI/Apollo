@@ -66,10 +66,10 @@ class TransformerModel(nn.Module):
             # Alternatively, decoder is shared with embedding layer:
             # self.masked_token_decoder.weight = self.token_embeddings.weight
         if settings.masked_visit_concept_learning:
-            self.masked_vist_token_decoder = nn.Linear(in_features=settings.hidden_size,
-                                                       out_features=visit_tokenizer.get_vocab_size())
-            self.masked_vist_token_decoder.bias.data.zero_()
-            nn.init.xavier_uniform_(self.masked_vist_token_decoder.weight)
+            self.masked_visit_token_decoder = nn.Linear(in_features=settings.hidden_size,
+                                                        out_features=visit_tokenizer.get_vocab_size())
+            self.masked_visit_token_decoder.bias.data.zero_()
+            nn.init.xavier_uniform_(self.masked_visit_token_decoder.weight)
         if settings.label_prediction:
             self.label_decoder = nn.Linear(in_features=settings.hidden_size,
                                            out_features=2)
@@ -114,7 +114,7 @@ class TransformerModel(nn.Module):
             predictions[ModelOutputNames.TOKEN_PREDICTIONS] = self.masked_token_decoder(encoded)
         if self.settings.masked_visit_concept_learning:
             # No softmax here, as it's included in CrossEntropyLoss:
-            predictions[ModelOutputNames.VISIT_TOKEN_PREDICTIONS] = self.masked_vist_token_decoder(encoded)
+            predictions[ModelOutputNames.VISIT_TOKEN_PREDICTIONS] = self.masked_visit_token_decoder(encoded)
         if self.settings.label_prediction:
             predictions[ModelOutputNames.LABEL_PREDICTIONS] = self.label_decoder(encoded[:, 0, :])
         return predictions
@@ -122,7 +122,7 @@ class TransformerModel(nn.Module):
     def freeze_non_head(self):
         """Freeze all parameters except the head layers."""
         for name, param in self.named_parameters():
-            if 'masked_token_decoder' in name or 'masked_vist_token_decoder' in name or 'label_decoder' in name:
+            if 'masked_token_decoder' in name or 'masked_visit_token_decoder' in name or 'label_decoder' in name:
                 continue
             param.requires_grad = False
         self._frozen = True
