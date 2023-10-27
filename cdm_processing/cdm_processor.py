@@ -9,7 +9,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from cdm_processing.abstract_cdm_processor import AbstractCdmDataProcessor
-from cdm_processing.cdm_processing_settings import CdmProcesingSettings
+from cdm_processing.cdm_processing_settings import CdmProcessingSettings
 import cdm_processing.cdm_processor_utils as cdm_utils
 import utils.logger as logger
 
@@ -19,13 +19,13 @@ class CdmDataProcessor(AbstractCdmDataProcessor):
     A re-implementation of the processor for CEHR-BERT (https://github.com/cumc-dbmi/cehr-bert)
     """
 
-    def __init__(self, settings: CdmProcesingSettings):
+    def __init__(self, settings: CdmProcessingSettings):
         super().__init__(
             cdm_data_path=settings.cdm_data_path,
             output_path=settings.output_path,
             max_cores=settings.max_cores,
             has_labels=settings.has_labels,
-            label_subfolder=settings.label_subfolder
+            label_subfolder=settings.label_sub_folder
         )
         self._settings = settings
         if settings.map_drugs_to_ingredients:
@@ -33,11 +33,12 @@ class CdmDataProcessor(AbstractCdmDataProcessor):
         if settings.profile:
             self.set_profile(True)
         logger.log_settings(settings)
+        settings.write_mapping_settings(os.path.join(settings.output_path, "cdm_mapping.ini"))
 
-    def _process_parition_cdm_data(self,
-                                   cdm_tables: Dict[str, pa.Table],
-                                   labels: Optional[pa.Table],
-                                   partition_i: int):
+    def _process_partition_cdm_data(self,
+                                    cdm_tables: Dict[str, pa.Table],
+                                    labels: Optional[pa.Table],
+                                    partition_i: int):
         """
         Process a single partition of CDM data, and save the result to disk.
         """
@@ -79,8 +80,8 @@ class CdmDataProcessor(AbstractCdmDataProcessor):
         Args:
             cdm_tables: A dictionary of CDM tables, with the table name as key and the table as value. The person table
                 should have the date_of_birth field added using the add_date_of_birth_to_person_table() function.
-            event_table: The table with the clinical events. This is a combination across the CDM domain tables, as created
-                by the union_cdm_tables() function.
+            event_table: The table with the clinical events. This is a combination across the CDM domain tables, as
+                created by the union_cdm_tables() function.
             labels: The table with the labels.
         Returns:
             A table with the data needed for the CEHR-BERT model.
@@ -178,7 +179,7 @@ class CdmDataProcessor(AbstractCdmDataProcessor):
             part1 = ""
             part2 = ""
         sql = "SELECT tokens.*, " \
-              f"{part1}"\
+              f"{part1}" \
               "  ROW_NUMBER() OVER " \
               "    (PARTITION BY observation_period_id ORDER BY visit_concept_orders, sort_order) - 1  AS orders " \
               "FROM (" \
@@ -223,8 +224,8 @@ class CdmDataProcessor(AbstractCdmDataProcessor):
         if self._settings.has_labels:
             aggregate_list.append(("label", "any"))
             name_list.append("label")
-        sequence_data = union_tokens.group_by("observation_period_id").\
-            aggregate(aggregate_list).\
+        sequence_data = union_tokens.group_by("observation_period_id"). \
+            aggregate(aggregate_list). \
             rename_columns(name_list)
         return sequence_data
 
@@ -233,7 +234,7 @@ def main(args: List[str]):
     config = configparser.ConfigParser()
     with open(args[0]) as file:  # Explicitly opening file so error is thrown when not found
         config.read_file(file)
-    settings = CdmProcesingSettings(config)
+    settings = CdmProcessingSettings(config)
     cdm_data_processor = CdmDataProcessor(settings)
     cdm_data_processor.process_cdm_data()
 

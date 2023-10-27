@@ -79,3 +79,17 @@ class TrainingSettings:
             raise ValueError(f"Invalid hidden_act: {self.hidden_act}")
         if self.embedding_combination_method not in ["concat", "sum"]:
             raise ValueError(f"Invalid embedding_combination_method: {self.embedding_combination_method}")
+
+    def write_model_settings(self, filename: str) -> None:
+        config = ConfigParser()
+        config.add_section("model")
+        config.set("model", "hidden_size", str(self.hidden_size))
+        config.set("model", "num_attention_heads", str(self.num_attention_heads))
+        config.set("model", "num_hidden_layers", str(self.num_hidden_layers))
+        config.set("model", "intermediate_size", str(self.intermediate_size))
+        config.set("model", "hidden_act", str(self.hidden_act))
+        config.set("model", "embedding_combination_method", str(self.embedding_combination_method))
+        config.set("model", "hidden_dropout_prob", str(self.hidden_dropout_prob))
+        config.set("model", "attention_probs_dropout_prob", str(self.attention_probs_dropout_prob))
+        with open(filename, "w") as config_file:
+            config.write(config_file)

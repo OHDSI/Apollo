@@ -71,7 +71,7 @@ class AbstractCdmDataProcessor(ABC):
                       clear_log_file=clear_log_file)
 
     @abstractmethod
-    def _process_parition_cdm_data(self,
+    def _process_partition_cdm_data(self,
                                    cdm_tables: Dict[str, pa.Table],
                                    labels: Optional[pa.Table],
                                    partition_i: int):
@@ -129,6 +129,6 @@ class AbstractCdmDataProcessor(ABC):
             labels = pq.read_table(os.path.join(self._cdm_data_path, self._label_subfolder, file_name))
         else:
             labels = None
-        self._process_parition_cdm_data(cdm_tables=cdm_tables, labels=labels, partition_i=partition_i)
+        self._process_partition_cdm_data(cdm_tables=cdm_tables, labels=labels, partition_i=partition_i)
 
         logging.debug("Finished partition %s of %s", partition_i, self._person_partition_count)

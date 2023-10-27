@@ -1,6 +1,7 @@
 import configparser
 import logging
 import os
+import shutil
 import sys
 import time
 from typing import List, Dict, Optional, Tuple
@@ -51,6 +52,8 @@ class ModelTrainer:
         os.makedirs(settings.output_folder, exist_ok=True)
         self._configure_logger()
         logger.log_settings(settings)
+        settings.write_model_settings(os.path.join(settings.output_folder, "model.ini"))
+        shutil.copy2(os.path.join(settings.sequence_data_folder, "cdm_mapping.ini"), settings.output_folder)
         self._writer = SummaryWriter(settings.output_folder)
         self._concept_tokenizer = self._get_concept_tokenizer(file_name=CONCEPT_TOKENIZER_FILE_NAME,
                                                               field_name=DataNames.CONCEPT_IDS)
