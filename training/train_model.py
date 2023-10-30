@@ -208,10 +208,10 @@ class ModelTrainer:
     def evaluate_model(self, result_file: str) -> None:
         self._load_checkpoint()
         self._run_model(train=False)
-        events = EventAccumulator(self._settings.output_folder)
-        events.Reload()
-        for learning_objective in self._learning_objectives:
-            learning_objective.report_performance_metrics(train=False, writer=self._writer, epoch=self._epoch)
+        # events = EventAccumulator(self._settings.output_folder)
+        # events.Reload()
+        # for learning_objective in self._learning_objectives:
+        #     learning_objective.report_performance_metrics(train=False, writer=self._writer, epoch=self._epoch)
 
 
     def _save_checkpoint(self):

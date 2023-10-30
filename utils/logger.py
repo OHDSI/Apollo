@@ -32,7 +32,7 @@ def create_logger(log_file_name: str, clear_log_file: bool = False):
     """
     if clear_log_file:
         open(log_file_name, "w").close()
-    logger = logging.getLogger(log_file_name)
+    logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
     if not len(logger.handlers):
         _add_file_handler(logger=logger, log_file_name=log_file_name)

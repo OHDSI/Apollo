@@ -82,7 +82,7 @@ class TransformerModel(nn.Module):
             nn.init.xavier_uniform_(self.masked_visit_token_decoder.weight)
         if settings.label_prediction:
             self.label_decoder = nn.Linear(in_features=settings.hidden_size,
-                                           out_features=2)
+                                           out_features=1)
             self.label_decoder.bias.data.zero_()
             nn.init.xavier_uniform_(self.label_decoder.weight)
 
@@ -129,7 +129,7 @@ class TransformerModel(nn.Module):
             # No softmax here, as it's included in CrossEntropyLoss:
             predictions[ModelOutputNames.VISIT_TOKEN_PREDICTIONS] = self.masked_visit_token_decoder(encoded)
         if self.settings.label_prediction:
-            predictions[ModelOutputNames.LABEL_PREDICTIONS] = self.label_decoder(encoded[:, 0, :])
+            predictions[ModelOutputNames.LABEL_PREDICTIONS] = torch.sigmoid(self.label_decoder(encoded[:, 0, :]))
         return predictions
 
     def freeze_non_head(self):

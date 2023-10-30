@@ -1,11 +1,12 @@
 import logging
 import random
 from abc import ABC, abstractmethod
-from typing import Dict
+from typing import Dict, List
 
 import numpy as np
 import torch
 from torch.utils.tensorboard import SummaryWriter
+import sklearn.metrics as metrics
 
 from data_loading.tokenizer import ConceptTokenizer
 from data_loading.variable_names import ModelInputNames, DataNames, ModelOutputNames
@@ -38,7 +39,7 @@ def _prefix_and_pad(sequence: np.ndarray[any],
     return sequence
 
 
-class TokenPredictionPerformanc:
+class TokenPredictionPerformance:
 
     def __init__(self):
         self.sum_loss: float = 0
@@ -77,17 +78,17 @@ class TokenPredictionPerformanc:
                           epoch)
 
 
-class BinaryPredictionPerformanc:
+class BinaryPredictionPerformance:
 
     def __init__(self):
         self.sum_loss: float = 0
         self.predictions: list = []
         self.labels: list = []
 
-    def add(self, loss: float, prediction: float, label: bool) -> None:
+    def add(self, loss: float, prediction: List[float], label: List[float]) -> None:
         self.sum_loss += loss
-        self.predictions.append(prediction)
-        self.labels.append(label)
+        self.predictions.extend(prediction)
+        self.labels.extend(label)
 
     def reset(self) -> None:
         self.sum_loss = 0
@@ -97,22 +98,37 @@ class BinaryPredictionPerformanc:
     def get_mean_loss(self) -> float:
         return self.sum_loss / len(self.predictions)
 
-    def get_mean_accuracy(self) -> float:
-        return self.sum_accuracy / self.n
+    def get_auc(self) -> float:
+        fpr, tpr, thresholds = metrics.roc_curve(self.labels, self.predictions)
+        return metrics.auc(fpr, tpr)
+
+    def get_auprc(self) -> float:
+        return metrics.average_precision_score(self.labels, self.predictions)
+
+    def get_brier_score(self) -> float:
+        return metrics.brier_score_loss(self.labels, self.predictions)
 
     def report_metrics(self, train: bool, objective_label: str, writer: SummaryWriter, epoch: int) -> None:
         label = "train" if train else "validation"
         label += " " + objective_label
-        logging.info("Epoch %d %s mean loss: %0.2f, mean accuracy: %0.2f%%",
+        logging.info("Epoch %d %s mean loss: %0.2f, AUC: %0.2f, AUPRC: %0.2f, Brier score: %0.2f",
                      epoch,
                      label,
                      self.get_mean_loss(),
-                     100 * self.get_mean_accuracy())
+                     self.get_auc(),
+                     self.get_auprc(),
+                     self.get_brier_score())
         writer.add_scalar(f"{label} mean loss",
                           self.get_mean_loss(),
                           epoch)
-        writer.add_scalar(f"{label} mean accuracy",
-                          self.get_mean_accuracy(),
+        writer.add_scalar(f"{label} AUC",
+                          self.get_auc(),
+                          epoch)
+        writer.add_scalar(f"{label} AUPRC",
+                          self.get_auprc(),
+                          epoch)
+        writer.add_scalar(f"{label} Brier score",
+                          self.get_brier_score(),
                           epoch)
 
 
@@ -142,7 +158,7 @@ class LearningObjective(ABC):
             max_sequence_length: The maximum length of any sequence.
 
         Returns
-            Two dictonaries to be used by pytorch. The first is the input, the second is the output.
+            Two dictionaries to be used by pytorch. The first is the input, the second is the output.
         """
         pass
 
@@ -307,7 +323,7 @@ class MaskedVisitConceptLearningObjective(LearningObjective):
             visit_concept_tokenizer: The tokenizer to use to tokenize the visit concepts.
         """
         self._tokenizer = visit_concept_tokenizer
-        self._criterion = torch.nn.CrossEntropyLoss(ignore_index=IGNORE_INDEX)
+        self._criterion = torch.nn.BCELoss()
         self._performance = TokenPredictionPerformance()
 
     def process_row(self, row: Dict, start_index: int, end_index: int, max_sequence_length: int) -> tuple[Dict, Dict]:
@@ -387,7 +403,7 @@ class LabelPredictionLearningObjective(LearningObjective):
         self._concept_tokenizer = concept_tokenizer
         self._visit_tokenizer = visit_tokenizer
         self._criterion = torch.nn.CrossEntropyLoss()
-        self._performance = TokenPredictionPerformance()
+        self._performance = BinaryPredictionPerformance()
 
     def process_row(self, row: Dict, start_index: int, end_index: int, max_sequence_length: int) -> tuple[Dict, Dict]:
         # Truncate the sequences:
@@ -397,7 +413,7 @@ class LabelPredictionLearningObjective(LearningObjective):
         ages = np.array(row[DataNames.AGES][start_index:end_index], dtype=np.float32)
         visit_concept_orders = np.array(row[DataNames.VISIT_CONCEPT_ORDERS][start_index:end_index])
         visit_concept_ids = np.array(row[DataNames.VISIT_CONCEPT_IDS][start_index:end_index])
-        label = row[DataNames.LABEL]
+        label = float(row[DataNames.LABEL])
 
         # Tokenize:
         token_ids = self._concept_tokenizer.encode(concept_ids)
@@ -451,10 +467,10 @@ class LabelPredictionLearningObjective(LearningObjective):
         label_predictions = predictions[ModelOutputNames.LABEL_PREDICTIONS]
         labels = outputs[ModelInputNames.FINETUNE_LABEL].long()
 
-        loss = self._criterion(label_predictions, labels)
-        visit_token_accuracy = _masked_token_accuracy(label_predictions.unsqueeze(1), labels.unsqueeze(1))
+        loss = self._criterion(torch.squeeze(label_predictions), labels.double())
         self._performance.add(loss=loss.float().mean().item(),
-                              accuracy=visit_token_accuracy)
+                              prediction=label_predictions.detach().cpu().tolist(),
+                              label=labels.detach().cpu().tolist())
         return loss
 
     def reset_performance_metrics(self) -> None:
