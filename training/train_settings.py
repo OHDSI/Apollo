@@ -9,20 +9,16 @@ class TrainingSettings:
     sequence_data_folder: str
     output_folder: str
     pretrained_model_folder: Optional[str]
-
-    # data preparation
     batch_size: int
-    max_sequence_length: int
-    truncate_type: str
 
     # learning objectives
     masked_concept_learning: bool
     mask_one_concept_per_visit: bool
     masked_visit_concept_learning: bool
+    truncate_type: str
     label_prediction: bool
 
     # training
-    do_evaluation: bool
     train_fraction: float
     num_epochs: int
     num_freeze_epochs: int
@@ -30,6 +26,7 @@ class TrainingSettings:
     weight_decay: float
 
     # model
+    max_sequence_length: int
     hidden_size: int
     num_attention_heads: int
     num_hidden_layers: int
@@ -45,23 +42,21 @@ class TrainingSettings:
         self.pretrained_model_folder = config.get("system", "pretrained_model_folder")
         if self.pretrained_model_folder.strip() == "":
             self.pretrained_model_folder = None
-
-        self.batch_size = config.getint("data preparation", "batch_size")
-        self.max_sequence_length = config.getint("data preparation", "max_sequence_length")
-        self.truncate_type = config.get("data preparation", "truncate_type")
+        self.batch_size = config.getint("system", "batch_size")
 
         self.masked_concept_learning = config.getboolean("learning objectives", "masked_concept_learning")
         self.mask_one_concept_per_visit = config.getboolean("learning objectives", "mask_one_concept_per_visit")
         self.masked_visit_concept_learning = config.getboolean("learning objectives", "masked_visit_concept_learning")
+        self.truncate_type = config.get("learning objectives", "truncate_type")
         self.label_prediction = config.getboolean("learning objectives", "label_prediction")
 
-        self.do_evaluation = config.getboolean("training", "do_evaluation")
         self.train_fraction = config.getfloat("training", "train_fraction")
         self.num_epochs = config.getint("training", "num_epochs")
         self.num_freeze_epochs = config.getint("training", "num_freeze_epochs")
         self.learning_rate = config.getfloat("training", "learning_rate")
         self.weight_decay = config.getfloat("training", "weight_decay")
 
+        self.max_sequence_length = config.getint("model", "max_sequence_length")
         self.hidden_size = config.getint("model", "hidden_size")
         self.num_attention_heads = config.getint("model", "num_attention_heads")
         self.num_hidden_layers = config.getint("model", "num_hidden_layers")

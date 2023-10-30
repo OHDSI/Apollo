@@ -10,7 +10,6 @@ import torch
 from torch import optim
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-
 import utils.logger as logger
 
 from training.train_settings import TrainingSettings
@@ -91,6 +90,9 @@ class ModelTrainer:
             json_file = os.path.join(self._settings.pretrained_model_folder, file_name)
             logging.info("Loading pre-trained concept tokenizer for %s from %s", field_name, json_file)
             concept_tokenizer = tokenizer.load_from_json(json_file)
+            # Write to output folder so the fine-tuned model can be used without the pre-trained model:
+            new_json_file = os.path.join(self._settings.output_folder, file_name)
+            concept_tokenizer.save_to_json(new_json_file)
         else:
             json_file = os.path.join(self._settings.output_folder, file_name)
             if os.path.exists(json_file):
@@ -104,22 +106,24 @@ class ModelTrainer:
                 concept_tokenizer.save_to_json(json_file)
         return concept_tokenizer
 
-    def _get_data_sets(self) -> Tuple[ApolloDataset, Optional[ApolloDataset]]:
+    def _get_data_sets(self) -> Tuple[Optional[ApolloDataset], Optional[ApolloDataset]]:
         data_transformer = ApolloDataTransformer(learning_objectives=self._learning_objectives,
                                                  max_sequence_length=self._settings.max_sequence_length,
                                                  truncate_type=self._settings.truncate_type)
-        if self._settings.do_evaluation:
-            train_fraction = self._settings.train_fraction
+        if self._settings.train_fraction < 1.0:
             test_data = ApolloDataset(folder=self._settings.sequence_data_folder,
                                       data_transformer=data_transformer,
+                                      train_test_split=self._settings.train_fraction,
                                       is_train=False)
         else:
-            train_fraction = 1.0
             test_data = None
-        train_data = ApolloDataset(folder=self._settings.sequence_data_folder,
-                                   data_transformer=data_transformer,
-                                   train_test_split=train_fraction,
-                                   is_train=True)
+        if self._settings.train_fraction > 0.0:
+            train_data = ApolloDataset(folder=self._settings.sequence_data_folder,
+                                       data_transformer=data_transformer,
+                                       train_test_split=self._settings.train_fraction,
+                                       is_train=True)
+        else:
+            train_data = None
         return train_data, test_data
 
     def _run_model(self, train: bool) -> None:
@@ -180,6 +184,7 @@ class ModelTrainer:
 
         for learning_objective in self._learning_objectives:
             learning_objective.report_performance_metrics(train, self._writer, self._epoch)
+        self._writer.flush()
 
     def train_model(self) -> None:
         logging.info("Performing computations on device: %s", self._device.type)
@@ -191,13 +196,23 @@ class ModelTrainer:
             self._model.freeze_non_head()
         for self._epoch in range(start, self._settings.num_epochs + 1):
             logging.info("Starting epoch %d", self._epoch)
-            self._run_model(train=True)
-            self._save_checkpoint()
-            if self._settings.do_evaluation:
+            if self._train_data is not None:
+                self._run_model(train=True)
+                self._save_checkpoint()
+            if self._test_data is not None:
                 self._run_model(train=False)
             if self._model.is_frozen() and self._epoch >= self._settings.num_freeze_epochs:
                 logging.info("Unfreezing pre-trained model weights")
                 self._model.unfreeze_all()
+
+    def evaluate_model(self, result_file: str) -> None:
+        self._load_checkpoint()
+        self._run_model(train=False)
+        events = EventAccumulator(self._settings.output_folder)
+        events.Reload()
+        for learning_objective in self._learning_objectives:
+            learning_objective.report_performance_metrics(train=False, writer=self._writer, epoch=self._epoch)
+
 
     def _save_checkpoint(self):
         file_name = os.path.join(self._settings.output_folder, f"checkpoint_{self._epoch:03d}.pth")

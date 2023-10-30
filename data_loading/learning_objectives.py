@@ -38,7 +38,7 @@ def _prefix_and_pad(sequence: np.ndarray[any],
     return sequence
 
 
-class TokenPredictionPerformance:
+class TokenPredictionPerformanc:
 
     def __init__(self):
         self.sum_loss: float = 0
@@ -61,7 +61,46 @@ class TokenPredictionPerformance:
     def get_mean_accuracy(self) -> float:
         return self.sum_accuracy / self.n
 
-    def report_metrics(self, train: bool, objective_label: str, writer, epoch) -> None:
+    def report_metrics(self, train: bool, objective_label: str, writer: SummaryWriter, epoch: int) -> None:
+        label = "train" if train else "validation"
+        label += " " + objective_label
+        logging.info("Epoch %d %s mean loss: %0.2f, mean accuracy: %0.2f%%",
+                     epoch,
+                     label,
+                     self.get_mean_loss(),
+                     100 * self.get_mean_accuracy())
+        writer.add_scalar(f"{label} mean loss",
+                          self.get_mean_loss(),
+                          epoch)
+        writer.add_scalar(f"{label} mean accuracy",
+                          self.get_mean_accuracy(),
+                          epoch)
+
+
+class BinaryPredictionPerformanc:
+
+    def __init__(self):
+        self.sum_loss: float = 0
+        self.predictions: list = []
+        self.labels: list = []
+
+    def add(self, loss: float, prediction: float, label: bool) -> None:
+        self.sum_loss += loss
+        self.predictions.append(prediction)
+        self.labels.append(label)
+
+    def reset(self) -> None:
+        self.sum_loss = 0
+        self.predictions = []
+        self.labels = []
+
+    def get_mean_loss(self) -> float:
+        return self.sum_loss / len(self.predictions)
+
+    def get_mean_accuracy(self) -> float:
+        return self.sum_accuracy / self.n
+
+    def report_metrics(self, train: bool, objective_label: str, writer: SummaryWriter, epoch: int) -> None:
         label = "train" if train else "validation"
         label += " " + objective_label
         logging.info("Epoch %d %s mean loss: %0.2f, mean accuracy: %0.2f%%",
