@@ -1,6 +1,6 @@
 from configparser import ConfigParser
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Dict
 
 
 @dataclass
@@ -12,13 +12,21 @@ class SimulationModelSettings:
     visit_multiplier: int
     days_to_simulate: int
 
-    def __init__(self, config: ConfigParser):
-        self.dynamic_state_count = config.getint("simulation", "dynamic_state_count")
-        self.fixed_state_count = config.getint("simulation", "fixed_state_count")
-        self.concept_count = config.getint("simulation", "concept_count")
-        self.serious_concept_count = config.getint("simulation", "serious_concept_count")
-        self.visit_multiplier = config.getint("simulation", "visit_multiplier")
-        self.days_to_simulate = config.getint("simulation", "days_to_simulate")
+    def __init__(self, config: [ConfigParser, Dict]):
+        if isinstance(config, ConfigParser):
+            self.dynamic_state_count = config.getint("simulation", "dynamic_state_count")
+            self.fixed_state_count = config.getint("simulation", "fixed_state_count")
+            self.concept_count = config.getint("simulation", "concept_count")
+            self.serious_concept_count = config.getint("simulation", "serious_concept_count")
+            self.visit_multiplier = config.getint("simulation", "visit_multiplier")
+            self.days_to_simulate = config.getint("simulation", "days_to_simulate")
+        else:
+            self.dynamic_state_count = config["dynamic_state_count"]
+            self.fixed_state_count = config["fixed_state_count"]
+            self.concept_count = config["concept_count"]
+            self.serious_concept_count = config["serious_concept_count"]
+            self.visit_multiplier = config["visit_multiplier"]
+            self.days_to_simulate = config["days_to_simulate"]
 
 
 @dataclass

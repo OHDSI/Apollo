@@ -37,7 +37,7 @@ class Evaluator:
         self.predict()
 
     def fine_tune(self) -> None:
-        sequence_data_folder = os.path.join(self._settings.output_folder,
+        sequence_data_folder = os.path.join(self._settings.train_data_folder,
                                             "person_sequence_" + self._settings.train_label_sub_folder)
         # logging.info("Convert CDM training data to sequence format")
         # cdm_mapping_config = configparser.ConfigParser()
@@ -54,7 +54,7 @@ class Evaluator:
         # cdm_data_processor = CdmDataProcessor(cdm_processing_settings)
         # cdm_data_processor.process_cdm_data()
 
-        model_folder = os.path.join(self._settings.output_folder,
+        model_folder = os.path.join(self._settings.train_data_folder,
                                     "model_" + self._settings.train_label_sub_folder)
         logging.info("Fine-tune model using training data")
         model_config = configparser.ConfigParser()
@@ -81,7 +81,7 @@ class Evaluator:
         model_trainer.train_model()
 
     def predict(self) -> None:
-        sequence_data_folder = os.path.join(self._settings.output_folder,
+        sequence_data_folder = os.path.join(self._settings.test_data_folder,
                                             "person_sequence_" + self._settings.test_label_sub_folder)
         logging.info("Convert CDM test data to sequence format")
         cdm_mapping_config = configparser.ConfigParser()
@@ -98,15 +98,19 @@ class Evaluator:
         cdm_data_processor = CdmDataProcessor(cdm_processing_settings)
         cdm_data_processor.process_cdm_data()
 
-        model_folder = os.path.join(self._settings.output_folder,
-                                    "model_" + self._settings.test_label_sub_folder)
+        model_folder = os.path.join(self._settings.train_data_folder,
+                                    "model_" + self._settings.train_label_sub_folder)
+        evaluation_folder = os.path.join(self._settings.test_data_folder,
+                                         "evaluation_" + self._settings.test_label_sub_folder)
+        evaluation_file = os.path.join(self._settings.output_folder,
+                                       "evaluation" + self._settings.test_label_sub_folder + ".csv")
         logging.info("Predict on test data using trained model")
         model_config = configparser.ConfigParser()
         model_config.read_dict(self._model_config)
         model_config.add_section("system")
         model_config["system"]["sequence_data_folder"] = sequence_data_folder
-        model_config["system"]["output_folder"] = model_folder
-        model_config["system"]["pretrained_model_folder"] = ""
+        model_config["system"]["output_folder"] = evaluation_folder
+        model_config["system"]["pretrained_model_folder"] = model_folder
         model_config["system"]["batch_size"] = str(self._settings.batch_size)
         model_config.add_section("learning objectives")
         model_config["learning objectives"]["truncate_type"] = self._settings.truncate_type
@@ -122,7 +126,7 @@ class Evaluator:
         model_config["training"]["weight_decay"] = str(self._settings.weight_decay)
         training_settings = TrainingSettings(model_config)
         model_trainer = ModelTrainer(settings=training_settings)
-        model_trainer.evaluate_model()
+        model_trainer.evaluate_model(evaluation_file)
 
 
 def main(args: List[str]):

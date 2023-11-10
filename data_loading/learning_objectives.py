@@ -10,7 +10,7 @@ import sklearn.metrics as metrics
 
 from data_loading.tokenizer import ConceptTokenizer
 from data_loading.variable_names import ModelInputNames, DataNames, ModelOutputNames
-
+from utils.row import Row
 
 IGNORE_INDEX = -1
 
@@ -62,7 +62,10 @@ class TokenPredictionPerformance:
     def get_mean_accuracy(self) -> float:
         return self.sum_accuracy / self.n
 
-    def report_metrics(self, train: bool, objective_label: str, writer: SummaryWriter, epoch: int) -> None:
+    def report_metrics(self,
+                       train: bool,
+                       objective_label: str,
+                       writer: [SummaryWriter, Row], epoch: int) -> None:
         label = "train" if train else "validation"
         label += " " + objective_label
         logging.info("Epoch %d %s mean loss: %0.2f, mean accuracy: %0.2f%%",
@@ -70,12 +73,16 @@ class TokenPredictionPerformance:
                      label,
                      self.get_mean_loss(),
                      100 * self.get_mean_accuracy())
-        writer.add_scalar(f"{label} mean loss",
-                          self.get_mean_loss(),
-                          epoch)
-        writer.add_scalar(f"{label} mean accuracy",
-                          self.get_mean_accuracy(),
-                          epoch)
+        if isinstance(writer, SummaryWriter):
+            writer.add_scalar(f"{label} mean loss",
+                              self.get_mean_loss(),
+                              epoch)
+            writer.add_scalar(f"{label} mean accuracy",
+                              self.get_mean_accuracy(),
+                              epoch)
+        else:
+            writer.put_value(f"{label} mean loss", self.get_mean_loss())
+            writer.put_value(f"{label} mean accuracy", self.get_mean_accuracy())
 
 
 class BinaryPredictionPerformance:
@@ -108,7 +115,11 @@ class BinaryPredictionPerformance:
     def get_brier_score(self) -> float:
         return metrics.brier_score_loss(self.labels, self.predictions)
 
-    def report_metrics(self, train: bool, objective_label: str, writer: SummaryWriter, epoch: int) -> None:
+    def report_metrics(self,
+                       train: bool,
+                       objective_label: str,
+                       writer: [SummaryWriter, Row],
+                       epoch: int) -> None:
         label = "train" if train else "validation"
         label += " " + objective_label
         logging.info("Epoch %d %s mean loss: %0.2f, AUC: %0.2f, AUPRC: %0.2f, Brier score: %0.2f",
@@ -118,18 +129,24 @@ class BinaryPredictionPerformance:
                      self.get_auc(),
                      self.get_auprc(),
                      self.get_brier_score())
-        writer.add_scalar(f"{label} mean loss",
-                          self.get_mean_loss(),
-                          epoch)
-        writer.add_scalar(f"{label} AUC",
-                          self.get_auc(),
-                          epoch)
-        writer.add_scalar(f"{label} AUPRC",
-                          self.get_auprc(),
-                          epoch)
-        writer.add_scalar(f"{label} Brier score",
-                          self.get_brier_score(),
-                          epoch)
+        if isinstance(writer, SummaryWriter):
+            writer.add_scalar(f"{label} mean loss",
+                              self.get_mean_loss(),
+                              epoch)
+            writer.add_scalar(f"{label} AUC",
+                              self.get_auc(),
+                              epoch)
+            writer.add_scalar(f"{label} AUPRC",
+                              self.get_auprc(),
+                              epoch)
+            writer.add_scalar(f"{label} Brier score",
+                              self.get_brier_score(),
+                              epoch)
+        else:
+            writer.put_value(f"{label} mean loss", self.get_mean_loss())
+            writer.put_value(f"{label} AUC", self.get_auc())
+            writer.put_value(f"{label} AUPRC", self.get_auprc())
+            writer.put_value(f"{label} Brier score", self.get_brier_score())
 
 
 def _masked_token_accuracy(token_predictions: torch.Tensor, token_ids: torch.Tensor) -> float:
@@ -183,7 +200,7 @@ class LearningObjective(ABC):
         pass
 
     @abstractmethod
-    def report_performance_metrics(self, train: bool, writer: SummaryWriter, epoch: int) -> None:
+    def report_performance_metrics(self, train: bool, writer: [SummaryWriter, Row], epoch: int) -> None:
         """
         Report the performance metrics.
         Args:
@@ -310,7 +327,7 @@ class MaskedConceptLearningObjective(LearningObjective):
     def reset_performance_metrics(self) -> None:
         self._performance.reset()
 
-    def report_performance_metrics(self, train: bool, writer: SummaryWriter, epoch: int) -> None:
+    def report_performance_metrics(self, train: bool, writer: [SummaryWriter, Row], epoch: int) -> None:
         self._performance.report_metrics(train, "masked concept", writer, epoch)
 
 
@@ -323,7 +340,7 @@ class MaskedVisitConceptLearningObjective(LearningObjective):
             visit_concept_tokenizer: The tokenizer to use to tokenize the visit concepts.
         """
         self._tokenizer = visit_concept_tokenizer
-        self._criterion = torch.nn.BCELoss()
+        self._criterion = torch.nn.CrossEntropyLoss(ignore_index=IGNORE_INDEX)
         self._performance = TokenPredictionPerformance()
 
     def process_row(self, row: Dict, start_index: int, end_index: int, max_sequence_length: int) -> tuple[Dict, Dict]:
@@ -383,7 +400,7 @@ class MaskedVisitConceptLearningObjective(LearningObjective):
     def reset_performance_metrics(self) -> None:
         self._performance.reset()
 
-    def report_performance_metrics(self, train: bool, writer: SummaryWriter, epoch: int) -> None:
+    def report_performance_metrics(self, train: bool, writer: [SummaryWriter, Row], epoch: int) -> None:
         self._performance.report_metrics(train, "masked visit", writer, epoch)
 
 
@@ -402,7 +419,7 @@ class LabelPredictionLearningObjective(LearningObjective):
         """
         self._concept_tokenizer = concept_tokenizer
         self._visit_tokenizer = visit_tokenizer
-        self._criterion = torch.nn.CrossEntropyLoss()
+        self._criterion = torch.nn.BCELoss()
         self._performance = BinaryPredictionPerformance()
 
     def process_row(self, row: Dict, start_index: int, end_index: int, max_sequence_length: int) -> tuple[Dict, Dict]:
@@ -465,9 +482,9 @@ class LabelPredictionLearningObjective(LearningObjective):
 
     def compute_loss(self, outputs: Dict[str, torch.Tensor], predictions: Dict[str, torch.Tensor]) -> torch.Tensor:
         label_predictions = predictions[ModelOutputNames.LABEL_PREDICTIONS]
-        labels = outputs[ModelInputNames.FINETUNE_LABEL].long()
+        labels = outputs[ModelInputNames.FINETUNE_LABEL]
 
-        loss = self._criterion(torch.squeeze(label_predictions), labels.double())
+        loss = self._criterion(torch.squeeze(label_predictions), labels.float())
         self._performance.add(loss=loss.float().mean().item(),
                               prediction=label_predictions.detach().cpu().tolist(),
                               label=labels.detach().cpu().tolist())
@@ -476,5 +493,5 @@ class LabelPredictionLearningObjective(LearningObjective):
     def reset_performance_metrics(self) -> None:
         self._performance.reset()
 
-    def report_performance_metrics(self, train: bool, writer: SummaryWriter, epoch: int) -> None:
+    def report_performance_metrics(self, train: bool, writer: [SummaryWriter, Row], epoch: int) -> None:
         self._performance.report_metrics(train, "label prediction", writer, epoch)

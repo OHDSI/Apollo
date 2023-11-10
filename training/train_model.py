@@ -19,6 +19,7 @@ import data_loading.learning_objectives as learning_objectives
 import data_loading.tokenizer as tokenizer
 from data_loading.variable_names import DataNames
 from model.model import TransformerModel
+from utils.row import Row
 
 LOGGER_FILE_NAME = "_model_training_log.txt"
 BATCH_REPORT_INTERVAL = 1000
@@ -208,10 +209,10 @@ class ModelTrainer:
     def evaluate_model(self, result_file: str) -> None:
         self._load_checkpoint()
         self._run_model(train=False)
-        # events = EventAccumulator(self._settings.output_folder)
-        # events.Reload()
-        # for learning_objective in self._learning_objectives:
-        #     learning_objective.report_performance_metrics(train=False, writer=self._writer, epoch=self._epoch)
+        row = Row()
+        for learning_objective in self._learning_objectives:
+            learning_objective.report_performance_metrics(train=False, writer=row, epoch=self._epoch)
+        row.write_to_csv(result_file)
 
 
     def _save_checkpoint(self):

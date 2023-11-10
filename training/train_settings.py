@@ -78,6 +78,7 @@ class TrainingSettings:
     def write_model_settings(self, filename: str) -> None:
         config = ConfigParser()
         config.add_section("model")
+        config.set("model", "max_sequence_length", str(self.max_sequence_length))
         config.set("model", "hidden_size", str(self.hidden_size))
         config.set("model", "num_attention_heads", str(self.num_attention_heads))
         config.set("model", "num_hidden_layers", str(self.num_hidden_layers))

@@ -88,7 +88,7 @@ class Simulator:
         logging.info("Loading simulation configuration from %s", json_file_name)
         with open(json_file_name, "r") as f:
             loaded = json.load(f)
-        self._settings.simulation_model_settings = SimulationModelSettings(**loaded["simulation_settings"])
+        self._settings.simulation_model_settings = SimulationModelSettings(loaded["simulation_settings"])
         self._state_count = loaded["state_count"]
         self._concept_ids = np.array(loaded["concept_ids"])
         self._serious_concept_idx = np.array(loaded["serious_concept_idx"])
@@ -181,8 +181,8 @@ class Simulator:
                 observed_concept_idx = admission_concept_idx | (np.random.binomial(n=model_settings.visit_multiplier,
                                                                                    p=concept_probabilities) != 0)
                 if is_prediction and t > index_day:
-                    if observed_concept_idx in self._prediction_idx:
-                        prediction_labels = prediction_labels | observed_concept_idx
+                    observed_prediction_idx = observed_concept_idx[self._prediction_idx]
+                    prediction_labels = prediction_labels | observed_prediction_idx
                 else:
                     concept_ids = self._concept_ids[observed_concept_idx]
                     for concept_id in concept_ids:
