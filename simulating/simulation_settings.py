@@ -34,6 +34,7 @@ class SimulationSettings:
 
     # prediction data generation
     generate_prediction_data: bool
+    prediction_concept_count: int
     partition_count: int
     train_person_count: int
     test_person_count: int
@@ -51,16 +52,17 @@ class SimulationSettings:
         self.max_cores = config.getint("system", "max_cores")
         self.root_folder = config.get("system", "root_folder")
 
-        self.generate_pre_training_data = config.getboolean("pre_training_data_generation",
+        self.generate_pre_training_data = config.getboolean("pre-training data generation",
                                                             "generate_pre_training_data")
-        self.partition_count = config.getint("pre_training_data_generation", "partition_count")
-        self.person_count = config.getint("pre_training_data_generation", "person_count")
+        self.partition_count = config.getint("pre-training data generation", "partition_count")
+        self.person_count = config.getint("pre-training data generation", "person_count")
 
-        self.generate_prediction_data = config.getboolean("prediction_data_generation", "generate_prediction_data")
-        self.partition_count = config.getint("prediction_data_generation", "partition_count")
-        self.train_person_count = config.getint("prediction_data_generation", "train_person_count")
-        self.test_person_count = config.getint("prediction_data_generation", "test_person_count")
-        self.prediction_window = config.getint("prediction_data_generation", "prediction_window")
+        self.generate_prediction_data = config.getboolean("prediction data generation", "generate_prediction_data")
+        self.prediction_concept_count = config.getint("prediction data generation", "prediction_concept_count")
+        self.partition_count = config.getint("prediction data generation", "partition_count")
+        self.train_person_count = config.getint("prediction data generation", "train_person_count")
+        self.test_person_count = config.getint("prediction data generation", "test_person_count")
+        self.prediction_window = config.getint("prediction data generation", "prediction_window")
 
         self.json_file_name = config.get("simulation", "json_file_name")
         if self.json_file_name.strip() == "":
@@ -77,3 +79,6 @@ class SimulationSettings:
     def _validate(self):
         if self.log_verbosity not in [0, 1, 2]:
             raise ValueError(f"Invalid log_verbosity: {self.log_verbosity}")
+        if (self.simulation_model_settings is not None and
+                self.prediction_concept_count > self.simulation_model_settings.concept_count):
+            raise ValueError("The prediction_concept_count cannot be greater than concept_count")

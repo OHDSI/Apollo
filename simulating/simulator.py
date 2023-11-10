@@ -75,6 +75,7 @@ class Simulator:
         if not os.path.exists(settings.root_folder):
             os.makedirs(settings.root_folder)
         self._task = ""
+        self._prediction_idx = []
         self._configure_logger()
         logger.log_settings(settings)
         if settings.json_file_name is not None:
@@ -97,7 +98,6 @@ class Simulator:
         self._concept_emission_coefs = [np.array(matrix) for matrix in loaded["concept_emission_coefs"]]
 
     def _init_from_settings(self, settings: SimulationModelSettings):
-        self._settings = settings
         self._state_count = settings.dynamic_state_count + settings.fixed_state_count + 2  # + 2 for age and sex
         self._concept_ids = np.arange(settings.concept_count) + 1000000
 
@@ -120,7 +120,7 @@ class Simulator:
         self._concept_emission_coefs = []
         for i in range(settings.concept_count):
             matrix = np.zeros(self._state_count * self._state_count)
-            non_zero_count = round(len(matrix) / np.sqrt(self._settings.concept_count))
+            non_zero_count = round(len(matrix) / np.sqrt(settings.concept_count))
             matrix[np.random.choice(len(matrix), size=non_zero_count, replace=False)] = \
                 np.random.laplace(loc=0, scale=0.5, size=non_zero_count)
             self._concept_emission_coefs.append(matrix.reshape(self._state_count, self._state_count))
@@ -135,7 +135,7 @@ class Simulator:
     def _simulate_person(self, person_id: int):
         model_settings = self._settings.simulation_model_settings
         if self._task == PREDICTION_TASK:
-            prediction_labels = np.zeros(model_settings.concept_count, dtype=bool)
+            prediction_labels = np.zeros(self._settings.prediction_concept_count, dtype=bool)
             # Currently just using full prediction window, but could change to make index day random:
             index_day = model_settings.days_to_simulate - self._settings.prediction_window
             is_prediction = True
@@ -181,7 +181,8 @@ class Simulator:
                 observed_concept_idx = admission_concept_idx | (np.random.binomial(n=model_settings.visit_multiplier,
                                                                                    p=concept_probabilities) != 0)
                 if is_prediction and t > index_day:
-                    prediction_labels = prediction_labels | observed_concept_idx
+                    if observed_concept_idx in self._prediction_idx:
+                        prediction_labels = prediction_labels | observed_concept_idx
                 else:
                     concept_ids = self._concept_ids[observed_concept_idx]
                     for concept_id in concept_ids:
@@ -204,9 +205,9 @@ class Simulator:
                     if self._settings.log_verbosity == OBSESSIVE:
                         logging.debug("Person %s visit on day %s with concept IDs: %s", person_id, t, concept_ids)
         if isinstance(self._cdm_data, cdm_data.CdmDataWithLabels):
-            for i in range(model_settings.concept_count):
+            for i in range(len(self._prediction_idx)):
                 self._cdm_data.add_label(person_id=person_id,
-                                         concept_id=self._concept_ids[i],
+                                         concept_id=self._concept_ids[self._prediction_idx[i]],
                                          label=prediction_labels[i])
 
     def simulate(self, task: str):
@@ -216,6 +217,9 @@ class Simulator:
             if not os.path.exists(output_folder):
                 os.makedirs(output_folder)
         elif task == PREDICTION_TASK:
+            if not self._settings.generate_prediction_data:
+                logging.info("Skipping simulation of data for prediction task as specified in config")
+                return
             logging.info("Simulating data for prediction task")
             train_folder = os.path.join(self._settings.root_folder, TRAIN_FOLDER)
             if not os.path.exists(train_folder):
@@ -223,6 +227,11 @@ class Simulator:
             test_folder = os.path.join(self._settings.root_folder, TEST_FOLDER)
             if not os.path.exists(test_folder):
                 os.makedirs(test_folder)
+            # Pick the concepts that will be used for prediction:
+            self._prediction_idx = np.round(np.linspace(0,
+                                                        self._settings.simulation_model_settings.concept_count - 1,
+                                                        self._settings.prediction_concept_count)
+                                            ).astype(int)
         else:
             raise ValueError("Unknown task: %s" % task)
         self._task = task
@@ -290,7 +299,7 @@ class Simulator:
     def save_to_json(self, file_name: str):
         with open(file_name, "w") as f:
             to_save = {
-                "simulation_settings": self._settings.__dict__,
+                "simulation_settings": self._settings.simulation_model_settings.__dict__,
                 "state_count": self._state_count,
                 "concept_ids": self._concept_ids.tolist(),
                 "serious_concept_idx": self._serious_concept_idx.tolist(),
