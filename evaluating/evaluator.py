@@ -39,20 +39,20 @@ class Evaluator:
     def fine_tune(self) -> None:
         sequence_data_folder = os.path.join(self._settings.train_data_folder,
                                             "person_sequence_" + self._settings.train_label_sub_folder)
-        # logging.info("Convert CDM training data to sequence format")
-        # cdm_mapping_config = configparser.ConfigParser()
-        # cdm_mapping_config.read_dict(self._cdm_mapping_config)
-        # cdm_mapping_config.add_section("system")
-        # cdm_mapping_config["system"]["cdm_data_path"] = self._settings.train_data_folder
-        # cdm_mapping_config["system"]["label_sub_folder"] = self._settings.train_label_sub_folder
-        # cdm_mapping_config["system"]["output_path"] = sequence_data_folder
-        # cdm_mapping_config["system"]["max_cores"] = str(self._settings.max_cores)
-        # cdm_mapping_config.add_section("debug")
-        # cdm_mapping_config["debug"]["profile"] = str(False)
-        # cdm_mapping_config["mapping"]["has_labels"] = str(True)
-        # cdm_processing_settings = CdmProcessingSettings(cdm_mapping_config)
-        # cdm_data_processor = CdmDataProcessor(cdm_processing_settings)
-        # cdm_data_processor.process_cdm_data()
+        logging.info("Convert CDM training data to sequence format")
+        cdm_mapping_config = configparser.ConfigParser()
+        cdm_mapping_config.read_dict(self._cdm_mapping_config)
+        cdm_mapping_config.add_section("system")
+        cdm_mapping_config["system"]["cdm_data_path"] = self._settings.train_data_folder
+        cdm_mapping_config["system"]["label_sub_folder"] = self._settings.train_label_sub_folder
+        cdm_mapping_config["system"]["output_path"] = sequence_data_folder
+        cdm_mapping_config["system"]["max_cores"] = str(self._settings.max_cores)
+        cdm_mapping_config.add_section("debug")
+        cdm_mapping_config["debug"]["profile"] = str(False)
+        cdm_mapping_config["mapping"]["has_labels"] = str(True)
+        cdm_processing_settings = CdmProcessingSettings(cdm_mapping_config)
+        cdm_data_processor = CdmDataProcessor(cdm_processing_settings)
+        cdm_data_processor.process_cdm_data()
 
         model_folder = os.path.join(self._settings.train_data_folder,
                                     "model_" + self._settings.train_label_sub_folder)
