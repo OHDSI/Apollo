@@ -1,12 +1,15 @@
+"""
+Process CDM data into the sequence format needed for model training and evaluation.
+"""
 import os
 import sys
 from typing import Dict, List, Optional
 import logging
-import configparser
 
 import duckdb
 import pyarrow as pa
 import pyarrow.parquet as pq
+import yaml
 
 from cdm_processing.abstract_cdm_processor import AbstractCdmDataProcessor
 from cdm_processing.cdm_processing_settings import CdmProcessingSettings
@@ -24,16 +27,16 @@ class CdmDataProcessor(AbstractCdmDataProcessor):
             cdm_data_path=settings.cdm_data_path,
             output_path=settings.output_path,
             max_cores=settings.max_cores,
-            has_labels=settings.has_labels,
+            has_labels=settings.mapping_settings.has_labels,
             label_subfolder=settings.label_sub_folder
         )
         self._settings = settings
-        if settings.map_drugs_to_ingredients:
+        if settings.mapping_settings.map_drugs_to_ingredients:
             self._drug_mapping = cdm_utils.load_mapping_to_ingredients(self._cdm_data_path)
         if settings.profile:
             self.set_profile(True)
         logger.log_settings(settings)
-        settings.write_mapping_settings(os.path.join(settings.output_path, "cdm_mapping.ini"))
+        settings.write_mapping_settings(os.path.join(settings.output_path, "cdm_mapping.yaml"))
 
     def _process_partition_cdm_data(self,
                                     cdm_tables: Dict[str, pa.Table],
@@ -43,13 +46,14 @@ class CdmDataProcessor(AbstractCdmDataProcessor):
         Process a single partition of CDM data, and save the result to disk.
         """
         cdm_tables["person"] = cdm_utils.add_date_of_birth(cdm_tables["person"])
-        if self._settings.map_drugs_to_ingredients:
+        if self._settings.mapping_settings.map_drugs_to_ingredients:
             cdm_tables["drug_exposure"] = cdm_utils.map_concepts(cdm_table=cdm_tables["drug_exposure"],
                                                                  concept_id_field="drug_concept_id",
                                                                  mapping=self._drug_mapping)
         event_table = cdm_utils.union_domain_tables(cdm_tables)
         event_table, removed_concepts = cdm_utils.remove_concepts(event_table=event_table,
-                                                                  concept_ids=self._settings.concepts_to_remove)
+                                                                  concept_ids=self._settings.mapping_settings.
+                                                                  concepts_to_remove)
         event_table, removed_duplicates = cdm_utils.remove_duplicates(event_table=event_table)
         event_table, visit_occurrence, mapping_stats = cdm_utils.link_events_to_visits(event_table=event_table,
                                                                                        visit_occurrence=cdm_tables[
@@ -92,7 +96,7 @@ class CdmDataProcessor(AbstractCdmDataProcessor):
         con.register("observation_period_table", cdm_tables["observation_period"])
         con.register("person", cdm_tables["person"])
         con.register("event_table", event_table)
-        if self._settings.has_labels:
+        if self._settings.mapping_settings.has_labels:
             con.register("labels", labels)
         sql = "CREATE TABLE visits AS " \
               "SELECT visit_occurrence.*, " \
@@ -172,7 +176,7 @@ class CdmDataProcessor(AbstractCdmDataProcessor):
               "INNER JOIN person " \
               "  ON visits.person_id = person.person_id"
         con.execute(sql)
-        if self._settings.has_labels:
+        if self._settings.mapping_settings.has_labels:
             part1 = "  label, "
             part2 = "  INNER JOIN labels ON tokens.person_id = labels.person_id "
         else:
@@ -221,7 +225,7 @@ class CdmDataProcessor(AbstractCdmDataProcessor):
                      "orders",
                      "num_of_concepts",
                      "num_of_visits"]
-        if self._settings.has_labels:
+        if self._settings.mapping_settings.has_labels:
             aggregate_list.append(("label", "any"))
             name_list.append("label")
         sequence_data = union_tokens.group_by("observation_period_id"). \
@@ -231,9 +235,8 @@ class CdmDataProcessor(AbstractCdmDataProcessor):
 
 
 def main(args: List[str]):
-    config = configparser.ConfigParser()
-    with open(args[0]) as file:  # Explicitly opening file so error is thrown when not found
-        config.read_file(file)
+    with open(args[0]) as file:
+        config = yaml.safe_load(file)
     settings = CdmProcessingSettings(config)
     cdm_data_processor = CdmDataProcessor(settings)
     cdm_data_processor.process_cdm_data()

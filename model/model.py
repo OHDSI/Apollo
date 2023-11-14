@@ -8,80 +8,82 @@ from torch.nn import TransformerEncoder, TransformerEncoderLayer
 from data_loading.tokenizer import ConceptTokenizer
 from data_loading.variable_names import ModelInputNames, ModelOutputNames
 from model.embedding import PositionalEmbedding, TimeEmbedding
-from training.train_settings import TrainingSettings
+from training.train_settings import ModelSettings, LearningObjectiveSettings
 
 
 class TransformerModel(nn.Module):
 
     def __init__(self,
-                 settings: TrainingSettings,
+                 model_settings: ModelSettings,
+                 learning_objective_settings: LearningObjectiveSettings,
                  tokenizer: ConceptTokenizer,
                  visit_tokenizer: ConceptTokenizer):
         super().__init__()
-        self.settings = settings
+        self.model_settings = model_settings
+        self.learning_objective_settings = learning_objective_settings
         self._frozen = False
 
         # Embeddings:
         embeddings_total_dim = 0
-        if settings.masked_concept_learning or settings.label_prediction:
+        if learning_objective_settings.masked_concept_learning or learning_objective_settings.label_prediction:
             self.token_embeddings = nn.Embedding(num_embeddings=tokenizer.get_vocab_size(),
-                                                 embedding_dim=settings.hidden_size,
+                                                 embedding_dim=model_settings.hidden_size,
                                                  padding_idx=tokenizer.get_padding_token_id())
             nn.init.xavier_uniform_(self.token_embeddings.weight)
-            embeddings_total_dim += settings.hidden_size
-            self.position_embeddings = PositionalEmbedding(num_embeddings=settings.max_sequence_length,
-                                                           embedding_dim=settings.hidden_size)
-            embeddings_total_dim += settings.hidden_size
-            self.age_embeddings = TimeEmbedding(embedding_dim=settings.hidden_size)
-            embeddings_total_dim += settings.hidden_size
-            self.date_embeddings = TimeEmbedding(embedding_dim=settings.hidden_size)
-            embeddings_total_dim += settings.hidden_size
+            embeddings_total_dim += model_settings.hidden_size
+            self.position_embeddings = PositionalEmbedding(num_embeddings=model_settings.max_sequence_length,
+                                                           embedding_dim=model_settings.hidden_size)
+            embeddings_total_dim += model_settings.hidden_size
+            self.age_embeddings = TimeEmbedding(embedding_dim=model_settings.hidden_size)
+            embeddings_total_dim += model_settings.hidden_size
+            self.date_embeddings = TimeEmbedding(embedding_dim=model_settings.hidden_size)
+            embeddings_total_dim += model_settings.hidden_size
             self.segment_embeddings = nn.Embedding(num_embeddings=3,
-                                                   embedding_dim=settings.hidden_size,
+                                                   embedding_dim=model_settings.hidden_size,
                                                    padding_idx=0)
-            embeddings_total_dim += settings.hidden_size
-        if settings.masked_visit_concept_learning or settings.label_prediction:
+            embeddings_total_dim += model_settings.hidden_size
+        if learning_objective_settings.masked_visit_concept_learning or learning_objective_settings.label_prediction:
             self.visit_token_embeddings = nn.Embedding(num_embeddings=visit_tokenizer.get_vocab_size(),
-                                                       embedding_dim=settings.hidden_size,
+                                                       embedding_dim=model_settings.hidden_size,
                                                        padding_idx=visit_tokenizer.get_padding_token_id())
             nn.init.xavier_uniform_(self.visit_token_embeddings.weight)
-            embeddings_total_dim += settings.hidden_size
-        if settings.embedding_combination_method == "concat":
+            embeddings_total_dim += model_settings.hidden_size
+        if model_settings.embedding_combination_method == "concat":
             self.embedding_concat_rescale_layer = nn.Linear(in_features=embeddings_total_dim,
-                                                            out_features=settings.hidden_size)
+                                                            out_features=model_settings.hidden_size)
 
-        self.layer_norm = nn.LayerNorm(normalized_shape=settings.hidden_size)
-        self.dropout = nn.Dropout(settings.hidden_dropout_prob)
+        self.layer_norm = nn.LayerNorm(normalized_shape=model_settings.hidden_size)
+        self.dropout = nn.Dropout(model_settings.hidden_dropout_prob)
 
         # Encoder:
-        encoder_layers = TransformerEncoderLayer(d_model=settings.hidden_size,
-                                                 nhead=settings.num_attention_heads,
-                                                 dim_feedforward=settings.max_sequence_length,
-                                                 dropout=settings.hidden_dropout_prob,
-                                                 activation=settings.hidden_act,
+        encoder_layers = TransformerEncoderLayer(d_model=model_settings.hidden_size,
+                                                 nhead=model_settings.num_attention_heads,
+                                                 dim_feedforward=model_settings.max_sequence_length,
+                                                 dropout=model_settings.hidden_dropout_prob,
+                                                 activation=model_settings.hidden_act,
                                                  batch_first=True)
         self.transformer_encoder = TransformerEncoder(encoder_layer=encoder_layers,
-                                                      num_layers=settings.num_hidden_layers)
+                                                      num_layers=model_settings.num_hidden_layers)
         # Seems necessary per https://github.com/pytorch/pytorch/issues/72253
         for name, param in self.transformer_encoder.named_parameters():
             if 'weight' in name and param.data.dim() == 2:
                 nn.init.kaiming_uniform_(param)
 
         # Decoders:
-        if settings.masked_concept_learning:
-            self.masked_token_decoder = nn.Linear(in_features=settings.hidden_size,
+        if learning_objective_settings.masked_concept_learning:
+            self.masked_token_decoder = nn.Linear(in_features=model_settings.hidden_size,
                                                   out_features=tokenizer.get_vocab_size())
             self.masked_token_decoder.bias.data.zero_()
             nn.init.xavier_uniform_(self.masked_token_decoder.weight)
             # Alternatively, decoder is shared with embedding layer:
             # self.masked_token_decoder.weight = self.token_embeddings.weight
-        if settings.masked_visit_concept_learning:
-            self.masked_visit_token_decoder = nn.Linear(in_features=settings.hidden_size,
+        if learning_objective_settings.masked_visit_concept_learning:
+            self.masked_visit_token_decoder = nn.Linear(in_features=model_settings.hidden_size,
                                                         out_features=visit_tokenizer.get_vocab_size())
             self.masked_visit_token_decoder.bias.data.zero_()
             nn.init.xavier_uniform_(self.masked_visit_token_decoder.weight)
-        if settings.label_prediction:
-            self.label_decoder = nn.Linear(in_features=settings.hidden_size,
+        if learning_objective_settings.label_prediction:
+            self.label_decoder = nn.Linear(in_features=model_settings.hidden_size,
                                            out_features=1)
             self.label_decoder.bias.data.zero_()
             nn.init.xavier_uniform_(self.label_decoder.weight)
@@ -92,8 +94,9 @@ class TransformerModel(nn.Module):
     ) -> Dict[str, Tensor]:
 
         embeddings = []
-        if self.settings.masked_concept_learning or self.settings.label_prediction:
-            if self.settings.masked_concept_learning:
+        if (self.learning_objective_settings.masked_concept_learning or
+                self.learning_objective_settings.label_prediction):
+            if self.learning_objective_settings.masked_concept_learning:
                 token_ids = inputs[ModelInputNames.MASKED_TOKEN_IDS]
             else:
                 token_ids = inputs[ModelInputNames.TOKEN_IDS]
@@ -103,17 +106,17 @@ class TransformerModel(nn.Module):
             embeddings.append(self.date_embeddings(inputs[ModelInputNames.DATES]))
             embeddings.append(self.segment_embeddings(inputs[ModelInputNames.VISIT_SEGMENTS]))
             embeddings.append(self.position_embeddings(inputs[ModelInputNames.VISIT_CONCEPT_ORDERS]))
-        if self.settings.masked_visit_concept_learning:
+        if self.learning_objective_settings.masked_visit_concept_learning:
             masked_visit_token_ids = inputs[ModelInputNames.MASKED_VISIT_TOKEN_IDS]
             visit_embeddings = self.visit_token_embeddings(masked_visit_token_ids) * math.sqrt(
                 self.visit_token_embeddings.embedding_dim)
             embeddings.append(visit_embeddings)
 
-        if self.settings.embedding_combination_method == "concat":
+        if self.model_settings.embedding_combination_method == "concat":
             embeddings = torch.cat(embeddings, dim=-1)
             embeddings = self.embedding_concat_rescale_layer(embeddings)
             embeddings = torch.tanh(embeddings)
-        elif self.settings.embedding_combination_method == "sum":
+        elif self.model_settings.embedding_combination_method == "sum":
             embeddings = torch.stack(embeddings, dim=0).sum(dim=0)
 
         embeddings = self.layer_norm(embeddings)
@@ -122,13 +125,13 @@ class TransformerModel(nn.Module):
         encoded = self.transformer_encoder(src=embeddings, src_key_padding_mask=inputs[ModelInputNames.PADDING_MASK])
 
         predictions = {}
-        if self.settings.masked_concept_learning:
+        if self.learning_objective_settings.masked_concept_learning:
             # No softmax here, as it's included in CrossEntropyLoss:
             predictions[ModelOutputNames.TOKEN_PREDICTIONS] = self.masked_token_decoder(encoded)
-        if self.settings.masked_visit_concept_learning:
+        if self.learning_objective_settings.masked_visit_concept_learning:
             # No softmax here, as it's included in CrossEntropyLoss:
             predictions[ModelOutputNames.VISIT_TOKEN_PREDICTIONS] = self.masked_visit_token_decoder(encoded)
-        if self.settings.label_prediction:
+        if self.learning_objective_settings.label_prediction:
             predictions[ModelOutputNames.LABEL_PREDICTIONS] = torch.sigmoid(self.label_decoder(encoded[:, 0, :]))
         return predictions
 

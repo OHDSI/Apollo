@@ -44,7 +44,7 @@ By default, the simulation script will generate pretraining data in a subfolder 
 In addition, data will be generated for a patient-level prediction task, where patient data up to an index date is used to predict whether a patient will have a certain condition in the prediction window (default = 365 days) after the index date.
 Training data, for fine-tuning the pretrained model, will be generated in a subfolder called 'train'.
 Test data, for evaluating the fine-tuned model, will be generated in a subfolder called 'test'. 
-In both 'train' and 'test' folders, subfolders will be generated for each simulated concept ID with labels indicating whether the concept was observed in the prediction window.
+In both 'train' and 'test' folders, subfolders will be generated for a subset of simulated concept IDs with labels indicating whether the concept was observed in the prediction window.
 
 ### Procesing CDM data for CEHR-BERT pre-training
 

@@ -1,12 +1,14 @@
-from configparser import ConfigParser
 from dataclasses import dataclass
-from typing import Optional
+from typing import Dict, Any
+
+from training.train_settings import LearningObjectiveSettings, TrainingSettings
 
 
 @dataclass
 class EvaluationSettings:
     # system
     pretrained_model_folder: str
+    fine_tuned_model_folder: str
     train_data_folder: str
     train_label_sub_folder: str
     test_data_folder: str
@@ -14,41 +16,12 @@ class EvaluationSettings:
     output_folder: str
     max_cores: int
     batch_size: int
+    learning_objective_settings: LearningObjectiveSettings
+    training_settings: TrainingSettings
 
-    # learning objectives
-    truncate_type: str
-    label_prediction: bool
-
-    # training
-    do_evaluation: bool
-    train_fraction: float
-    num_epochs: int
-    num_freeze_epochs: int
-    learning_rate: float
-    weight_decay: float
-
-    def __init__(self, config: ConfigParser):
-        self.pretrained_model_folder = config.get("system", "pretrained_model_folder")
-        self.train_data_folder = config.get("system", "train_data_folder")
-        self.train_label_sub_folder = config.get("system", "train_label_sub_folder")
-        self.test_data_folder = config.get("system", "test_data_folder")
-        self.test_label_sub_folder = config.get("system", "test_label_sub_folder")
-        self.output_folder = config.get("system", "output_folder")
-        self.max_cores = config.getint("system", "max_cores")
-        self.batch_size = config.getint("system", "batch_size")
-
-        self.truncate_type = config.get("learning objectives", "truncate_type")
-        self.label_prediction = config.getboolean("learning objectives", "label_prediction")
-
-        self.do_evaluation = config.getboolean("training", "do_evaluation")
-        self.train_fraction = config.getfloat("training", "train_fraction")
-        self.num_epochs = config.getint("training", "num_epochs")
-        self.num_freeze_epochs = config.getint("training", "num_freeze_epochs")
-        self.learning_rate = config.getfloat("training", "learning_rate")
-        self.weight_decay = config.getfloat("training", "weight_decay")
-
-        self._validate()
-
-    def _validate(self):
-        if self.truncate_type not in ["random", "tail"]:
-            raise ValueError(f"Invalid truncate_type: {self.truncate_type}")
+    def __init__(self, config: Dict[str, Any]):
+        system = config["system"]
+        for key, value in system.items():
+            setattr(self, key, value)
+        self.learning_objective_settings = LearningObjectiveSettings(**config["learning objectives"])
+        self.training_settings = TrainingSettings(**config["training"])

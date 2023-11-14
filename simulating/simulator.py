@@ -10,7 +10,6 @@ To generate patient-level prediction problems with a gold standard, the model is
 date is randomly selected, and Monte-Carlo simulations are performed to simulate the future.
 """
 import cProfile
-import configparser
 import json
 import logging
 import multiprocessing
@@ -20,6 +19,7 @@ from typing import List
 
 import numpy as np
 import tqdm as tqdm
+import yaml
 
 import cdm_data
 import utils.logger as logger
@@ -62,9 +62,9 @@ def _simulate_date_of_birth(current_date: np.datetime64, age_indicator: int) -> 
         # Simulate a date of birth for an adult:
         birth_date = current_date - np.random.randint(365 * 18, 365 * 100)
     birth_date = np.datetime64(birth_date, 'D')
-    return birth_date.astype('datetime64[Y]').astype(int) + 1970, \
-           birth_date.astype('datetime64[M]').astype(int) % 12 + 1, \
-           birth_date.astype('datetime64[D]').astype(int) % 31 + 1
+    return (birth_date.astype('datetime64[Y]').astype(int) + 1970,
+            birth_date.astype('datetime64[M]').astype(int) % 12 + 1,
+            birth_date.astype('datetime64[D]').astype(int) % 31 + 1)
 
 
 class Simulator:
@@ -88,7 +88,7 @@ class Simulator:
         logging.info("Loading simulation configuration from %s", json_file_name)
         with open(json_file_name, "r") as f:
             loaded = json.load(f)
-        self._settings.simulation_model_settings = SimulationModelSettings(loaded["simulation_settings"])
+        self._settings.simulation_model_settings = SimulationModelSettings(**loaded["simulation_settings"])
         self._state_count = loaded["state_count"]
         self._concept_ids = np.array(loaded["concept_ids"])
         self._serious_concept_idx = np.array(loaded["serious_concept_idx"])
@@ -312,9 +312,8 @@ class Simulator:
 
 
 def main(args: List[str]):
-    config = configparser.ConfigParser()
-    with open(args[0]) as file:  # Explicitly opening file so error is thrown when not found
-        config.read_file(file)
+    with open(args[0]) as file:
+        config = yaml.safe_load(file)
     simulation_settings = SimulationSettings(config)
     simulator = Simulator(simulation_settings)
     simulator.simulate(PRETRAINING_TASK)
