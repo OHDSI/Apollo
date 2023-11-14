@@ -65,7 +65,7 @@ class TokenPredictionPerformance:
     def report_metrics(self,
                        train: bool,
                        objective_label: str,
-                       writer: [SummaryWriter, Row], epoch: int) -> None:
+                       writer: [SummaryWriter, Row, None], epoch: int) -> None:
         label = "train" if train else "validation"
         label += " " + objective_label
         logging.info("Epoch %d %s mean loss: %0.2f, mean accuracy: %0.2f%%",
@@ -80,7 +80,7 @@ class TokenPredictionPerformance:
             writer.add_scalar(f"{label} mean accuracy",
                               self.get_mean_accuracy(),
                               epoch)
-        else:
+        elif isinstance(writer, Row):
             writer.put_value(f"{label} mean loss", self.get_mean_loss())
             writer.put_value(f"{label} mean accuracy", self.get_mean_accuracy())
 
@@ -118,7 +118,7 @@ class BinaryPredictionPerformance:
     def report_metrics(self,
                        train: bool,
                        objective_label: str,
-                       writer: [SummaryWriter, Row],
+                       writer: [SummaryWriter, Row, None],
                        epoch: int) -> None:
         label = "train" if train else "validation"
         label += " " + objective_label
@@ -142,7 +142,7 @@ class BinaryPredictionPerformance:
             writer.add_scalar(f"{label} Brier score",
                               self.get_brier_score(),
                               epoch)
-        else:
+        elif isinstance(writer, Row):
             writer.put_value(f"{label} mean loss", self.get_mean_loss())
             writer.put_value(f"{label} AUC", self.get_auc())
             writer.put_value(f"{label} AUPRC", self.get_auprc())

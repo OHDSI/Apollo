@@ -52,14 +52,16 @@ class ModelTrainer:
         os.makedirs(settings.output_folder, exist_ok=True)
         self._configure_logger()
         logger.log_settings(settings)
-        settings.write_model_settings(os.path.join(settings.output_folder, "model.ini"))
-        shutil.copy2(os.path.join(settings.sequence_data_folder, "cdm_mapping.ini"), settings.output_folder)
-        self._writer = SummaryWriter(settings.output_folder)
+        self._writer: Optional[SummaryWriter] = None
+
+        # Get concept tokenizers:
         self._concept_tokenizer = self._get_concept_tokenizer(file_name=CONCEPT_TOKENIZER_FILE_NAME,
                                                               field_name=DataNames.CONCEPT_IDS)
         if settings.masked_visit_concept_learning or settings.label_prediction:
             self._visit_concept_tokenizer = self._get_concept_tokenizer(file_name=VISIT_CONCEPT_TOKENIZER_FILE_NAME,
                                                                         field_name=DataNames.VISIT_CONCEPT_IDS)
+
+        # Get learning objectives:
         self._learning_objectives = []
         if settings.masked_concept_learning:
             self._learning_objectives.append(learning_objectives.MaskedConceptLearningObjective(
@@ -72,7 +74,11 @@ class ModelTrainer:
             self._learning_objectives.append(learning_objectives.LabelPredictionLearningObjective(
                 concept_tokenizer=self._concept_tokenizer,
                 visit_tokenizer=self._visit_concept_tokenizer))
+
+        # Get data sets:
         self._train_data, self._test_data = self._get_data_sets()
+
+        # Get model and optimizer:
         self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self._model = TransformerModel(settings=self._settings,
                                        tokenizer=self._concept_tokenizer,
@@ -91,9 +97,6 @@ class ModelTrainer:
             json_file = os.path.join(self._settings.pretrained_model_folder, file_name)
             logging.info("Loading pre-trained concept tokenizer for %s from %s", field_name, json_file)
             concept_tokenizer = tokenizer.load_from_json(json_file)
-            # Write to output folder so the fine-tuned model can be used without the pre-trained model:
-            new_json_file = os.path.join(self._settings.output_folder, file_name)
-            concept_tokenizer.save_to_json(new_json_file)
         else:
             json_file = os.path.join(self._settings.output_folder, file_name)
             if os.path.exists(json_file):
@@ -185,11 +188,24 @@ class ModelTrainer:
 
         for learning_objective in self._learning_objectives:
             learning_objective.report_performance_metrics(train, self._writer, self._epoch)
-        self._writer.flush()
+        if self._writer is not None:
+            self._writer.flush()
 
     def train_model(self) -> None:
+        # Write the model,  cdm_mapping config files and tokenizers to the output folder so the trained model can be
+        # used without the original config and tokenizer files:
+        self._settings.write_model_settings(os.path.join(self._settings.output_folder, "model.ini"))
+        shutil.copy2(os.path.join(self._settings.sequence_data_folder, "cdm_mapping.ini"), self._settings.output_folder)
+        if self._settings.pretrained_model_folder is not None:
+            new_json_file = os.path.join(self._settings.output_folder, CONCEPT_TOKENIZER_FILE_NAME)
+            self._concept_tokenizer.save_to_json(new_json_file)
+            if self._settings.masked_visit_concept_learning or self._settings.label_prediction:
+                new_json_file = os.path.join(self._settings.output_folder, VISIT_CONCEPT_TOKENIZER_FILE_NAME)
+                self._visit_concept_tokenizer.save_to_json(new_json_file)
+
         logging.info("Performing computations on device: %s", self._device.type)
         logging.info("Total parameters: {:,} ".format(sum([param.nelement() for param in self._model.parameters()])))
+        self._writer = SummaryWriter(self._settings.output_folder)
         self._load_checkpoint()
         start = self._epoch + 1
         if self._settings.num_freeze_epochs >= self._epoch and self._settings.pretrained_model_folder is not None:
@@ -213,7 +229,6 @@ class ModelTrainer:
         for learning_objective in self._learning_objectives:
             learning_objective.report_performance_metrics(train=False, writer=row, epoch=self._epoch)
         row.write_to_csv(result_file)
-
 
     def _save_checkpoint(self):
         file_name = os.path.join(self._settings.output_folder, f"checkpoint_{self._epoch:03d}.pth")
