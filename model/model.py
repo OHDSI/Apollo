@@ -25,29 +25,35 @@ class TransformerModel(nn.Module):
 
         # Embeddings:
         embeddings_total_dim = 0
-        if learning_objective_settings.masked_concept_learning or learning_objective_settings.label_prediction:
+        if model_settings.concept_embedding:
             self.token_embeddings = nn.Embedding(num_embeddings=tokenizer.get_vocab_size(),
                                                  embedding_dim=model_settings.hidden_size,
                                                  padding_idx=tokenizer.get_padding_token_id())
             nn.init.xavier_uniform_(self.token_embeddings.weight)
             embeddings_total_dim += model_settings.hidden_size
-            self.position_embeddings = PositionalEmbedding(num_embeddings=model_settings.max_sequence_length,
-                                                           embedding_dim=model_settings.hidden_size)
+        if model_settings.visit_concept_embedding:
+            self.visit_concept_embeddings = nn.Embedding(num_embeddings=visit_tokenizer.get_vocab_size(),
+                                                         embedding_dim=model_settings.hidden_size,
+                                                         padding_idx=visit_tokenizer.get_padding_token_id())
+            nn.init.xavier_uniform_(self.visit_concept_embeddings.weight)
             embeddings_total_dim += model_settings.hidden_size
+        if model_settings.visit_order_embedding:
+            self.visit_order_embeddings = PositionalEmbedding(num_embeddings=model_settings.max_sequence_length,
+                                                              embedding_dim=model_settings.hidden_size)
+            embeddings_total_dim += model_settings.hidden_size
+        if model_settings.age_embedding:
             self.age_embeddings = TimeEmbedding(embedding_dim=model_settings.hidden_size)
             embeddings_total_dim += model_settings.hidden_size
+        if model_settings.date_embedding:
             self.date_embeddings = TimeEmbedding(embedding_dim=model_settings.hidden_size)
             embeddings_total_dim += model_settings.hidden_size
+        if model_settings.segment_embedding:
             self.segment_embeddings = nn.Embedding(num_embeddings=3,
                                                    embedding_dim=model_settings.hidden_size,
                                                    padding_idx=0)
             embeddings_total_dim += model_settings.hidden_size
-        if learning_objective_settings.masked_visit_concept_learning or learning_objective_settings.label_prediction:
-            self.visit_token_embeddings = nn.Embedding(num_embeddings=visit_tokenizer.get_vocab_size(),
-                                                       embedding_dim=model_settings.hidden_size,
-                                                       padding_idx=visit_tokenizer.get_padding_token_id())
-            nn.init.xavier_uniform_(self.visit_token_embeddings.weight)
-            embeddings_total_dim += model_settings.hidden_size
+
+        # Embedding combination:
         if model_settings.embedding_combination_method == "concat":
             self.embedding_concat_rescale_layer = nn.Linear(in_features=embeddings_total_dim,
                                                             out_features=model_settings.hidden_size)
@@ -94,23 +100,33 @@ class TransformerModel(nn.Module):
     ) -> Dict[str, Tensor]:
 
         embeddings = []
-        if (self.learning_objective_settings.masked_concept_learning or
-                self.learning_objective_settings.label_prediction):
+        if self.model_settings.concept_embedding:
             if self.learning_objective_settings.masked_concept_learning:
                 token_ids = inputs[ModelInputNames.MASKED_TOKEN_IDS]
             else:
                 token_ids = inputs[ModelInputNames.TOKEN_IDS]
             # Not sure about multiplication with the sqrt here, but it's in multiple BERT implementations:
             embeddings.append(self.token_embeddings(token_ids) * math.sqrt(self.token_embeddings.embedding_dim))
+
+        if self.model_settings.visit_concept_embedding:
+            if self.learning_objective_settings.masked_visit_concept_learning:
+                visit_token_ids = inputs[ModelInputNames.MASKED_VISIT_TOKEN_IDS]
+            else:
+                visit_token_ids = inputs[ModelInputNames.VISIT_TOKEN_IDS]
+            embeddings.append(
+                self.visit_concept_embeddings(visit_token_ids) * math.sqrt(self.visit_concept_embeddings.embedding_dim))
+
+        if self.model_settings.visit_order_embedding:
+            embeddings.append(self.visit_order_embeddings(inputs[ModelInputNames.VISIT_CONCEPT_ORDERS]))
+
+        if self.model_settings.age_embedding:
             embeddings.append(self.age_embeddings(inputs[ModelInputNames.AGES]))
+
+        if self.model_settings.date_embedding:
             embeddings.append(self.date_embeddings(inputs[ModelInputNames.DATES]))
+
+        if self.model_settings.segment_embedding:
             embeddings.append(self.segment_embeddings(inputs[ModelInputNames.VISIT_SEGMENTS]))
-            embeddings.append(self.position_embeddings(inputs[ModelInputNames.VISIT_CONCEPT_ORDERS]))
-        if self.learning_objective_settings.masked_visit_concept_learning:
-            masked_visit_token_ids = inputs[ModelInputNames.MASKED_VISIT_TOKEN_IDS]
-            visit_embeddings = self.visit_token_embeddings(masked_visit_token_ids) * math.sqrt(
-                self.visit_token_embeddings.embedding_dim)
-            embeddings.append(visit_embeddings)
 
         if self.model_settings.embedding_combination_method == "concat":
             embeddings = torch.cat(embeddings, dim=-1)

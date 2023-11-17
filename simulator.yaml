@@ -1,4 +1,3 @@
----
 system:
   # Maximum number of CPU cores to use:
   max_cores: 10

@@ -1,4 +1,3 @@
----
 system:
   # Path where data was stored using the CdmProcessor class:
   sequence_data_folder: d:/GPM_Sim/pretraining/person_sequence
@@ -47,6 +46,14 @@ training:
 model:
   # The maximum length of the input sequence: (default: 512)
   max_sequence_length: 512
+
+  # Use the following embeddings: (default: yes)
+  concept_embedding: yes
+  segment_embedding: yes
+  age_embedding: yes
+  date_embedding: yes
+  visit_order_embedding: yes
+  visit_concept_embedding: yes
 
   # Size of hidden layers: (default: 768)
   hidden_size: 768

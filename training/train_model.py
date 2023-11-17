@@ -15,6 +15,7 @@ from torch import optim
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 import utils.logger as logger
+from data_loading.model_inputs import InputTransformer
 
 from training.train_settings import ModelTrainingSettings
 from data_loading.dataset import ApolloDataset
@@ -75,9 +76,7 @@ class ModelTrainer:
             self._learning_objectives.append(learning_objectives.MaskedVisitConceptLearningObjective(
                 visit_concept_tokenizer=self._visit_concept_tokenizer))
         if settings.learning_objective_settings.label_prediction:
-            self._learning_objectives.append(learning_objectives.LabelPredictionLearningObjective(
-                concept_tokenizer=self._concept_tokenizer,
-                visit_tokenizer=self._visit_concept_tokenizer))
+            self._learning_objectives.append(learning_objectives.LabelPredictionLearningObjective())
 
         # Get data sets:
         self._train_data, self._test_data = self._get_data_sets()
@@ -116,7 +115,11 @@ class ModelTrainer:
         return concept_tokenizer
 
     def _get_data_sets(self) -> Tuple[Optional[ApolloDataset], Optional[ApolloDataset]]:
+        input_transformer = InputTransformer(concept_tokenizer=self._concept_tokenizer,
+                                             visit_tokenizer=self._visit_concept_tokenizer,
+                                             model_settings=self._settings.model_settings)
         data_transformer = ApolloDataTransformer(learning_objectives=self._learning_objectives,
+                                                 input_transformer=input_transformer,
                                                  max_sequence_length=self._settings.model_settings.max_sequence_length,
                                                  truncate_type=self._settings.learning_objective_settings.truncate_type)
         if self._settings.training_settings.train_fraction < 1.0:
@@ -157,18 +160,17 @@ class ModelTrainer:
                                  batch_size=self._settings.batch_size,
                                  num_workers=4,
                                  pin_memory=True)
-        for inputs, outputs in data_loader:
+        for inputs in data_loader:
             batch_count += 1
             # for batch_count in range(1, 1000):
 
             inputs = _dict_to_device(inputs, self._device)
-            outputs = _dict_to_device(outputs, self._device)
             predictions = self._model(inputs)
 
             loss = 0.0
             first = True
             for learning_objective in self._learning_objectives:
-                objective_loss = learning_objective.compute_loss(outputs=outputs,
+                objective_loss = learning_objective.compute_loss(outputs=inputs,
                                                                  predictions=predictions)
                 if first:
                     loss = objective_loss
@@ -200,7 +202,8 @@ class ModelTrainer:
         # Write the model,  cdm_mapping config files and tokenizers to the output folder so the trained model can be
         # used without the original config and tokenizer files:
         self._settings.write_model_settings(os.path.join(self._settings.output_folder, "model.yaml"))
-        shutil.copy2(os.path.join(self._settings.sequence_data_folder, "cdm_mapping.yaml"), self._settings.output_folder)
+        shutil.copy2(os.path.join(self._settings.sequence_data_folder, "cdm_mapping.yaml"),
+                     self._settings.output_folder)
         if self._settings.pretrained_model_folder is not None:
             new_json_file = os.path.join(self._settings.output_folder, CONCEPT_TOKENIZER_FILE_NAME)
             self._concept_tokenizer.save_to_json(new_json_file)

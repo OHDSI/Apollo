@@ -1,4 +1,3 @@
----
 system:
   # Path where data was stored using the GeneralPretrainedModelTools package:
   cdm_data_path: d:/GPM_Sim/pretraining

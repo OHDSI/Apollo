@@ -1,35 +1,34 @@
----
 system:
   # Path to a pre-trained model files to load. If empty, a new model will be created:
-  pretrained_model_folder: e:/GPM_Sim/pretraining/model
+  pretrained_model_folder: d:/GPM_Sim/pretraining/model
 
   # Path where the fine-tuned model files will be written:
-  fine_tuned_model_folder: e:/GPM_Sim/fine_tuning/model_c1000022
+  fine_tuned_model_folder: d:/GPM_Sim/fine_tuning/model_c1000022
 
-  # Path where train data was stored using the GeneralPretrainedModelTools package:
-  train_data_folder: e:/GPM_Sim/train
+  # Path where train data was stored using the GeneralPretrainedModelTools packagd:
+  train_data_folder: d:/GPM_Sim/train
 
   # Name of the sub folder holding the labels of the train data:
   train_label_sub_folder: label_c1000022
 
-  # Path where train data was stored using the GeneralPretrainedModelTools package:
-  test_data_folder: e:/GPM_Sim/test
+  # Path where train data was stored using the GeneralPretrainedModelTools packagd:
+  test_data_folder: d:/GPM_Sim/test
 
   # Name of the sub folder holding the labels of the train data:
   test_label_sub_folder: label_c1000022
 
   # Path where the results will be written:
-  output_folder: e:/GPM_Sim/eval
+  output_folder: d:/GPM_Sim/eval
 
-  # Maximum number of CPU cores to use:
+  # Maximum number of CPU cores to usd:
   max_cores: 5
 
   # Batch size for training and testing: (default: 32)
-  batch_size: 32
+  batch_sizd: 32
 
 learning objectives:
   # If the input sequence is longer than max_sequence_length, truncate the sequence "random" or keep the "tail":
-  truncate_type: tail
+  truncate_typd: tail
 
   # Predict a given label for each person:
   label_prediction: yes
@@ -44,7 +43,6 @@ training:
   # Number of epochs to freeze the pre-trained model for (if pretrained_model_folder is not empty):
   num_freeze_epochs: 1
 
-  learning_rate: 0.001
+  learning_ratd: 0.001
 
   weight_decay: 0.01
-...

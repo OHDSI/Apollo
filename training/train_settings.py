@@ -2,24 +2,7 @@ import yaml
 from dataclasses import dataclass, asdict
 from typing import Optional, Dict, Any
 
-
-@dataclass
-class ModelSettings:
-    max_sequence_length: int
-    hidden_size: int
-    num_attention_heads: int
-    num_hidden_layers: int
-    intermediate_size: int
-    hidden_act: str
-    embedding_combination_method: str
-    hidden_dropout_prob: float
-    attention_probs_dropout_prob: float
-
-    def __post_init__(self):
-        if self.hidden_act not in ["relu", "gelu"]:
-            raise ValueError(f"Invalid hidden_act: {self.hidden_act}")
-        if self.embedding_combination_method not in ["concat", "sum"]:
-            raise ValueError(f"Invalid embedding_combination_method: {self.embedding_combination_method}")
+from model.model_settings import ModelSettings
 
 
 @dataclass
@@ -64,6 +47,12 @@ class ModelTrainingSettings:
         self.learning_objective_settings = LearningObjectiveSettings(**config["learning objectives"])
         self.training_settings = TrainingSettings(**config["training"])
         self.model_settings = ModelSettings(**config["model"])
+
+    def __post_init__(self):
+        if self.learning_objective_settings.masked_concept_learning and not self.model_settings.concept_embedding:
+            raise ValueError("Must have concept embedding if masked_concept_learning is true")
+        if self.learning_objective_settings.masked_visit_concept_learning and not self.model_settings.visit_concept_embedding:
+            raise ValueError("Must have visit concept embedding if masked_visit_concept_learning is true")
 
     def write_model_settings(self, filename: str) -> None:
         with open(filename, "w") as config_file:

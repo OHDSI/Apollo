@@ -4,8 +4,9 @@ from typing import List
 
 class Row:
 
-    _fields: List[str] = []
-    _values: List[any] = []
+    def __init__(self):
+        self._fields: List[str] = []
+        self._values: List[any] = []
 
     def put_value(self, field: str, value: any):
         self._fields.append(field)
