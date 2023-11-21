@@ -10,6 +10,8 @@ import sys
 import time
 from typing import List, Dict, Optional, Tuple
 
+# Prevents error during validation when using torch 2.1.1:
+os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = str(1)
 import torch
 from torch import optim
 from torch.utils.data import DataLoader
@@ -82,7 +84,12 @@ class ModelTrainer:
         self._train_data, self._test_data = self._get_data_sets()
 
         # Get model and optimizer:
-        self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if torch.cuda.is_available():
+            self._device = torch.device("cuda")
+        elif torch.backends.mps.is_available():
+            self._device = torch.device("mps")
+        else:
+            self._device = torch.device("cpu")
         self._model = TransformerModel(model_settings=self._settings.model_settings,
                                        learning_objective_settings=self._settings.learning_objective_settings,
                                        tokenizer=self._concept_tokenizer,
@@ -151,7 +158,6 @@ class ModelTrainer:
         else:
             self._model.eval()
             dataset = self._test_data
-            # Not applying no_grad() as a workaround for https://github.com/pytorch/pytorch/issues/97111
         for learning_objective in self._learning_objectives:
             learning_objective.reset_performance_metrics()
         batch_count = 0
@@ -165,7 +171,11 @@ class ModelTrainer:
             # for batch_count in range(1, 1000):
 
             inputs = _dict_to_device(inputs, self._device)
-            predictions = self._model(inputs)
+            if train:
+                predictions = self._model(inputs)
+            else:
+                with torch.no_grad():
+                    predictions = self._model(inputs)
 
             loss = 0.0
             first = True
