@@ -7,6 +7,7 @@ import os
 import sys
 from typing import List, Dict
 
+import pandas as pd
 import yaml
 
 from evaluating.evaluation_settings import EvaluationSettings
@@ -74,7 +75,8 @@ class MetaEvaluator:
                               "train_label_sub_folder": self._settings.train_label_sub_folders[i],
                               "test_data_folder": self._settings.test_data_folder,
                               "test_label_sub_folder": self._settings.test_label_sub_folders[i],
-                              "output_folder": eval_folder, "max_cores": self._settings.max_cores,
+                              "output_folder": eval_folder,
+                              "max_cores": self._settings.max_cores,
                               "batch_size": self._settings.batch_size}
                     settings["system"] = system
                     evaluation_settings.append(EvaluationSettings(settings))
@@ -95,7 +97,40 @@ class MetaEvaluator:
             evaluator = Evaluator(evaluation_setting)
             evaluator.evaluate()
 
-        # TODO: combine results from different evaluations
+        self._combine_results()
+
+    def _combine_results(self) -> None:
+        rows = []
+        for settings in self._settings.fine_tuned_model_settings:
+            for pretrained_model in self._pretrained_model_settings:
+                for i in range(len(self._settings.train_label_sub_folders)):
+                    eval_file = os.path.join(self._settings.root_folder,
+                                             "eval_" +
+                                             _to_file_name(pretrained_model) +
+                                             "_" +
+                                             _to_file_name(settings["name"]),
+                                             "evaluation" +
+                                             self._settings.test_label_sub_folders[i] +
+                                             ".csv")
+                    row = pd.read_csv(eval_file)
+                    row["pretrained_model"] = pretrained_model
+                    row["fine_tuned_model"] = settings["name"]
+                    row["test_label_sub_folders"] = self._settings.test_label_sub_folders[i]
+                    rows.append(row)
+        df = pd.concat(rows)
+        df.to_csv(os.path.join(self._settings.root_folder, "evaluation.csv"), index=False)
+
+        file_name = os.path.join(self._settings.root_folder, "evaluation_pretrained_fine_tuned.csv")
+        (df.drop(columns="test_label_sub_folders")
+           .groupby(["pretrained_model", "fine_tuned_model"])
+           .mean()
+           .to_csv(file_name))
+
+        file_name = os.path.join(self._settings.root_folder, "evaluation_pretrained.csv")
+        (df.drop(columns=["test_label_sub_folders", "fine_tuned_model"])
+         .groupby(["pretrained_model"])
+         .mean()
+         .to_csv(file_name))
 
 
 def main(args: List[str]):

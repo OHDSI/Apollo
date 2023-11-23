@@ -24,11 +24,11 @@ system:
   max_cores: 5
 
   # Batch size for training and testing: (default: 32)
-  batch_sizd: 32
+  batch_size: 32
 
 learning objectives:
   # If the input sequence is longer than max_sequence_length, truncate the sequence "random" or keep the "tail":
-  truncate_typd: tail
+  truncate_type: tail
 
   # Predict a given label for each person:
   label_prediction: yes
@@ -43,6 +43,6 @@ training:
   # Number of epochs to freeze the pre-trained model for (if pretrained_model_folder is not empty):
   num_freeze_epochs: 1
 
-  learning_ratd: 0.001
+  learning_rate: 0.001
 
   weight_decay: 0.01
