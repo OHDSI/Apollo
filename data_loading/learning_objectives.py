@@ -334,7 +334,7 @@ class LabelPredictionLearningObjective(LearningObjective):
                     start_index: int,
                     end_index: int,
                     max_sequence_length: int) -> Dict[str, Union[np.ndarray, float]]:
-        label = float(row[DataNames.LABEL])
+        label = np.float32(row[DataNames.LABEL])
         model_inputs = {
             ModelInputNames.FINETUNE_LABEL: label
         }

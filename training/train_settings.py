@@ -25,6 +25,7 @@ class TrainingSettings:
     num_freeze_epochs: int
     learning_rate: float
     weight_decay: float
+    max_batches: Optional[int] = None
 
 
 @dataclass
@@ -37,6 +38,7 @@ class ModelTrainingSettings:
     training_settings: TrainingSettings
     learning_objective_settings: LearningObjectiveSettings
     model_settings: ModelSettings
+    pretrained_epoch: Optional[int] = None
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         if config is None:

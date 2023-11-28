@@ -53,10 +53,11 @@ pretrained models:
     label_prediction: no
   training:
     train_fraction: 0.8
-    num_epochs: 1
+    num_epochs: 100
     num_freeze_epochs: 1
     learning_rate: 0.001
     weight_decay: 0.01
+    max_batches:
   model:
     max_sequence_length: 512
     concept_embedding: yes
@@ -86,6 +87,7 @@ pretrained models:
     num_freeze_epochs: 1
     learning_rate: 0.001
     weight_decay: 0.01
+    max_batches:
   model:
     max_sequence_length: 512
     concept_embedding: yes
@@ -106,8 +108,11 @@ pretrained models:
 fine-tuned models:
 - name: fine_tuned_model_1
   pretrained models:
-  - pretrained_model_1
-  - pretrained_model_2
+  - name: pretrained_model_1
+    pretrained_epoch: 100
+  - name: pretrained_model_1
+    pretrained_epoch: 50
+  - name: pretrained_model_2
   learning objectives:
     label_prediction: yes
     truncate_type: tail
@@ -117,10 +122,11 @@ fine-tuned models:
     num_freeze_epochs: 1
     learning_rate: 0.001
     weight_decay: 0.01
+    max_batches:
 - name: fine_tuned_model_2
   pretrained models:
-  - pretrained_model_1
-  - pretrained_model_2
+  - name: pretrained_model_1
+  - name: pretrained_model_2
   learning objectives:
     label_prediction: yes
     truncate_type: tail
@@ -130,3 +136,4 @@ fine-tuned models:
     num_freeze_epochs: 0
     learning_rate: 0.001
     weight_decay: 0.01
+    max_batches:
