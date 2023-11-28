@@ -128,8 +128,8 @@ class MetaEvaluator:
                             raise ValueError("pretrained_epoch must be <= num_epochs")
                     eval_file = os.path.join(self._settings.root_folder,
                                              "eval_" +
-                                             _to_file_name(pretrained_model) +
-                                             "_" +
+                                             _to_file_name(pretrained_model["name"]) +
+                                             "_e" +
                                              str(pretrained_epoch) +
                                              "_" +
                                              _to_file_name(settings["name"]),
