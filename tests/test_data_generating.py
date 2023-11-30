@@ -8,6 +8,8 @@ import pyarrow as pa
 from torch.utils.data import DataLoader
 
 from data_loading import tokenizer, learning_objectives, parquet_data_iterator, dataset, data_transformer
+from data_loading.model_inputs import InputTransformer
+from model.model_settings import ModelSettings
 
 
 class TestDataGenerating(unittest.TestCase):
@@ -36,7 +38,7 @@ class TestDataGenerating(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.parquet_folder)
 
-    def test_parquest_data_iterator(self):
+    def test_parquet_data_iterator(self):
         data = parquet_data_iterator.ParquetDataIterator([os.path.join(self.parquet_folder, "test.parquet")], None)
         row_count = 0
         for row in data:
@@ -85,14 +87,33 @@ class TestDataGenerating(unittest.TestCase):
         visit_concept_tokenizer.fit_on_concept_sequences(ds, "visit_concept_ids")
         learning_objectives_ = [learning_objectives.MaskedConceptLearningObjective(concept_tokenizer),
                                 learning_objectives.MaskedVisitConceptLearningObjective(visit_concept_tokenizer)]
-        dt = data_transformer.ApolloDataTransformer(learning_objectives_)
+        model_settings = ModelSettings(max_sequence_length=256,
+                                       concept_embedding=True,
+                                       visit_order_embedding=True,
+                                       segment_embedding=True,
+                                       age_embedding=True,
+                                       date_embedding=True,
+                                       visit_concept_embedding=True,
+                                       hidden_size=100,
+                                       num_attention_heads=2,
+                                       num_hidden_layers=2,
+                                       intermediate_size=100,
+                                       hidden_act="relu",
+                                       embedding_combination_method="sum",
+                                       hidden_dropout_prob=0.1,
+                                       attention_probs_dropout_prob=0.1)
+        input_transformer = InputTransformer(concept_tokenizer=concept_tokenizer,
+                                             visit_tokenizer=visit_concept_tokenizer,
+                                             model_settings=model_settings)
+        dt = data_transformer.ApolloDataTransformer(learning_objectives=learning_objectives_,
+                                                    input_transformer=input_transformer)
         ds = dataset.ApolloDataset(folder=self.parquet_folder,
                                    data_transformer=dt,
                                    train_test_split=1,
                                    is_train=True)
         data_loader = DataLoader(ds, batch_size=1)
         batch_count = 0
-        for inputs, outputs in data_loader:
+        for inputs in data_loader:
             # TODO: add some specific tests on output
             batch_count += 1
             break
