@@ -139,7 +139,7 @@ class MetaEvaluator:
                                              self._settings.test_label_sub_folders[i] +
                                              ".csv")
                     row = pd.read_csv(eval_file)
-                    row["pretrained_model"] = pretrained_model
+                    row["pretrained_model"] = pretrained_model["name"]
                     row["pretrained_epoch"] = pretrained_epoch
                     row["fine_tuned_model"] = settings["name"]
                     row["test_label_sub_folders"] = self._settings.test_label_sub_folders[i]
