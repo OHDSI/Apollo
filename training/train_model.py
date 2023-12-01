@@ -67,8 +67,7 @@ class ModelTrainer:
         # Get concept tokenizers:
         self._concept_tokenizer = self._get_concept_tokenizer(file_name=CONCEPT_TOKENIZER_FILE_NAME,
                                                               field_name=DataNames.CONCEPT_IDS)
-        if (settings.learning_objective_settings.masked_visit_concept_learning or
-                settings.learning_objective_settings.label_prediction):
+        if settings.model_settings.visit_concept_embedding:
             self._visit_concept_tokenizer = self._get_concept_tokenizer(file_name=VISIT_CONCEPT_TOKENIZER_FILE_NAME,
                                                                         field_name=DataNames.VISIT_CONCEPT_IDS)
 
