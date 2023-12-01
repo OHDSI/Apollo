@@ -239,7 +239,10 @@ class ModelTrainer:
             logging.info("Starting epoch %d", self._epoch)
             if self._train_data is not None:
                 self._run_model(train=True)
-                self._save_checkpoint()
+                if (self._epoch == self._settings.training_settings.num_epochs or
+                        (self._settings.checkpoint_every is not None and
+                         self._epoch % self._settings.checkpoint_every == 0)):
+                    self._save_checkpoint()
             if self._test_data is not None:
                 self._run_model(train=False)
             if self._model.is_frozen() and self._epoch >= self._settings.training_settings.num_freeze_epochs:

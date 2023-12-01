@@ -1,15 +1,15 @@
 system:
   # Path where all intermediate and final results will be written:
-  root_folder: /Users/schuemie/Data/GPM_Sim/meta_evaluation
+  root_folder: /data/GPM_Sim/meta_evaluation
 
   # Path where data was stored using the CdmProcessor class:
-  sequence_data_folder: /Users/schuemie/Data/GPM_Sim/pretraining/person_sequence
+  sequence_data_folder: /data/GPM_Sim/pretraining/person_sequence
 
   # Path where train data was stored using the GeneralPretrainedModelTools package:
-  train_data_folder: /Users/schuemie/Data/GPM_Sim/train
+  train_data_folder: /data/GPM_Sim/train
   
   # Path where train data was stored using the GeneralPretrainedModelTools package:
-  test_data_folder: /Users/schuemie/Data/GPM_Sim/test
+  test_data_folder: /data/GPM_Sim/test
 
   # Names of the sub folders holding the labels of the train data:
   train_label_sub_folders:
@@ -42,6 +42,8 @@ system:
 
   # Batch size for training and testing: (default: 32)
   batch_size: 32
+
+  checkpoint_every: 50
 
 pretrained models:
 - name: reference

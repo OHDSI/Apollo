@@ -11,6 +11,9 @@ system:
   # Batch size for training and testing: (default: 32)
   batch_size: 32
 
+  # Save the model every checkpoint_every epochs:
+  checkpoint_every: 10
+
   # If specified, load this specific epoch of the pretrained model. Else the last epoch is loaded:
   pretrained_epoch:
 

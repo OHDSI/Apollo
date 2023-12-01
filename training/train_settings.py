@@ -35,6 +35,7 @@ class ModelTrainingSettings:
     output_folder: str
     pretrained_model_folder: Optional[str]
     batch_size: int
+    checkpoint_every: Optional[int]
     training_settings: TrainingSettings
     learning_objective_settings: LearningObjectiveSettings
     model_settings: ModelSettings

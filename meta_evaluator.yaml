@@ -43,6 +43,8 @@ system:
   # Batch size for training and testing: (default: 32)
   batch_size: 32
 
+  checkpoint_every: 50
+
 pretrained models:
 - name: pretrained_model_1
   learning objectives:

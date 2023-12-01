@@ -1,6 +1,6 @@
 system:
   # Path where data was stored using the GeneralPretrainedModelTools package:
-  cdm_data_path: /Users/schuemie/Data/GPM_Sim/pretraining
+  cdm_data_path: /data/GPM_Sim/pretraining
   
   # If the data has labels, what is the name of the sub folder?:
   label_sub_folder: label
@@ -9,7 +9,7 @@ system:
   max_cores: 5
   
   # Path where the person sequence data will be written:
-  output_path: /Users/schuemie/Data/GPM_Sim/pretraining/person_sequence
+  output_path: /data/GPM_Sim/pretraining/person_sequence
 
 
 mapping:

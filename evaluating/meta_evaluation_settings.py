@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 
 @dataclass
@@ -13,6 +13,7 @@ class MetaEvaluationSettings:
     test_label_sub_folders: List[str]
     max_cores: int
     batch_size: int
+    checkpoint_every: Optional[int]
     pretrained_model_settings: List[Dict[str, Any]]
     fine_tuned_model_settings: List[Dict[str, Any]]
 

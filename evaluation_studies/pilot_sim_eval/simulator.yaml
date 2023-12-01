@@ -3,7 +3,7 @@ system:
   max_cores: 10
 
   # Path where the data will be written:
-  root_folder: /Users/schuemie/Data/GPM_Sim
+  root_folder: /data/GPM_Sim
 
 
 pretraining data generation:

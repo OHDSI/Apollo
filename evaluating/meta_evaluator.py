@@ -45,6 +45,7 @@ class MetaEvaluator:
                       "sequence_data_folder": self._settings.sequence_data_folder,
                       "max_cores": self._settings.max_cores,
                       "batch_size": self._settings.batch_size,
+                      "checkpoint_every": self._settings.checkpoint_every,
                       "pretrained_model_folder": None}
             settings["system"] = system
             pretrained_model_settings[settings["name"]] = ModelTrainingSettings(settings)
@@ -91,6 +92,7 @@ class MetaEvaluator:
                               "output_folder": eval_folder,
                               "max_cores": self._settings.max_cores,
                               "batch_size": self._settings.batch_size,
+                              "checkpoint_every": self._settings.checkpoint_every,
                               "pretrained_epoch": pretrained_epoch}
                     settings["system"] = system
                     evaluation_settings.append(EvaluationSettings(settings))
