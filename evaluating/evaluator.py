@@ -68,6 +68,7 @@ class Evaluator:
             model_training_settings.output_folder = self._settings.fine_tuned_model_folder
             model_training_settings.pretrained_model_folder = self._settings.pretrained_model_folder
             model_training_settings.batch_size = self._settings.batch_size
+            model_training_settings.checkpoint_every = self._settings.checkpoint_every
             model_training_settings.training_settings = self._settings.training_settings
             model_training_settings.learning_objective_settings = self._settings.learning_objective_settings
             model_training_settings.learning_objective_settings.masked_concept_learning = False
@@ -105,6 +106,7 @@ class Evaluator:
             model_training_settings.output_folder = self._settings.output_folder
             model_training_settings.pretrained_model_folder = self._settings.fine_tuned_model_folder
             model_training_settings.batch_size = self._settings.batch_size
+            model_training_settings.checkpoint_every = self._settings.checkpoint_every
             training_settings = TrainingSettings(train_fraction=0,
                                                  num_epochs=1,
                                                  num_freeze_epochs=0,

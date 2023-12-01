@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from training.train_settings import LearningObjectiveSettings, TrainingSettings
 
@@ -16,6 +16,7 @@ class EvaluationSettings:
     output_folder: str
     max_cores: int
     batch_size: int
+    checkpoint_every: Optional[int]
     learning_objective_settings: LearningObjectiveSettings
     training_settings: TrainingSettings
 
