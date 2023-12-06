@@ -149,7 +149,7 @@ class MetaEvaluator:
 
         file_name = os.path.join(self._settings.root_folder, "evaluation_pretrained_fine_tuned.csv")
         (df.drop(columns="test_label_sub_folders")
-           .groupby(["pretrained_model", "fine_tuned_model"])
+           .groupby(["pretrained_model", "fine_tuned_model", "pretrained_epoch"])
            .mean()
            .to_csv(file_name))
 
