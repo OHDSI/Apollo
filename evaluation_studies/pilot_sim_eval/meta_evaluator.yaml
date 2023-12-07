@@ -317,7 +317,6 @@ fine-tuned models:
     num_freeze_epochs: 1
     learning_rate: 0.001
     weight_decay: 0.01
-    max_batches:
     
 - name: no_freeze
   pretrained models:
@@ -331,18 +330,17 @@ fine-tuned models:
     num_freeze_epochs: 0
     learning_rate: 0.001
     weight_decay: 0.01
-    max_batches:
     
-- name: reference
+- name: simple_regression
   pretrained models:
   - name: reference
   learning objectives:
     label_prediction: yes
     truncate_type: tail
+    simple_regression_model: yes
   training:
     train_fraction: 1
     num_epochs: 100
-    num_freeze_epochs: 1
+    num_freeze_epochs: 0
     learning_rate: 0.001
     weight_decay: 0.01
-    max_batches: 3

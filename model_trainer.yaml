@@ -34,6 +34,9 @@ learning objectives:
   # Predict a given label for each person:
   label_prediction: no
 
+  # Use a simple regression model instead of a transformer model: (default: no)
+  simple_regression_model: no
+
 
 training:
   # Fraction of the data to use for training. Set to 1 to skip evaluation:

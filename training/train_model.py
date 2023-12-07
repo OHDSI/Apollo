@@ -10,6 +10,8 @@ import sys
 import time
 from typing import List, Dict, Optional, Tuple
 
+from model.simple_regression_model import SimpleRegressionModel
+
 # Prevents error during validation when using torch 2.1.1:
 os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = str(1)
 import torch
@@ -93,10 +95,16 @@ class ModelTrainer:
             self._device = torch.device("mps")
         else:
             self._device = torch.device("cpu")
-        self._model = TransformerModel(model_settings=self._settings.model_settings,
-                                       learning_objective_settings=self._settings.learning_objective_settings,
-                                       tokenizer=self._concept_tokenizer,
-                                       visit_tokenizer=self._visit_concept_tokenizer)
+        if self._settings.model_settings.simple_regression_model:
+            self._model = SimpleRegressionModel(model_settings=self._settings.model_settings,
+                                                learning_objective_settings=self._settings.learning_objective_settings,
+                                                tokenizer=self._concept_tokenizer,
+                                                visit_tokenizer=self._visit_concept_tokenizer)
+        else:
+            self._model = TransformerModel(model_settings=self._settings.model_settings,
+                                           learning_objective_settings=self._settings.learning_objective_settings,
+                                           tokenizer=self._concept_tokenizer,
+                                           visit_tokenizer=self._visit_concept_tokenizer)
         self._model.to(self._device)
         self._optimizer = optim.Adam(params=self._model.parameters(),
                                      lr=settings.training_settings.learning_rate,
@@ -282,7 +290,8 @@ class ModelTrainer:
         """
         file_name = _find_latest_checkpoint(self._settings.output_folder)
         if file_name is None:
-            if self._settings.pretrained_model_folder is not None:
+            if (self._settings.pretrained_model_folder is not None and
+                    not self._settings.model_settings.simple_regression_model):
                 if self._settings.pretrained_epoch is not None:
                     file_name = os.path.join(self._settings.pretrained_model_folder,
                                              _get_file_name(self._settings.pretrained_epoch))

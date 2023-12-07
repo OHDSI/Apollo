@@ -12,6 +12,7 @@ class LearningObjectiveSettings:
     masked_concept_learning: bool = False
     mask_one_concept_per_visit: bool = False
     masked_visit_concept_learning: bool = False
+    simple_regression_model: bool = False
 
     def __post_init__(self):
         if self.truncate_type not in ["random", "tail"]:
@@ -56,6 +57,13 @@ class ModelTrainingSettings:
             raise ValueError("Must have concept embedding if masked_concept_learning is true")
         if self.learning_objective_settings.masked_visit_concept_learning and not self.model_settings.visit_concept_embedding:
             raise ValueError("Must have visit concept embedding if masked_visit_concept_learning is true")
+        if self.learning_objective_settings.simple_regression_model:
+            if self.learning_objective_settings.label_prediction:
+                raise ValueError("Must have label prediction if simple_regression_model is true")
+            if (self.learning_objective_settings.masked_concept_learning or
+                    self.learning_objective_settings.masked_visit_concept_learning):
+                raise ValueError("Masked concept learning and masked visit concept learning are not implemented "
+                                 "for the simple regression model.")
 
     def write_model_settings(self, filename: str) -> None:
         with open(filename, "w") as config_file:
