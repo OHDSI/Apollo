@@ -1,0 +1,141 @@
+system:
+  # Path where all intermediate and final results will be written:
+  root_folder: e:/GPM_Sim/meta_evaluation
+
+  # Path where data was stored using the CdmProcessor class:
+  sequence_data_folder: e:/GPM_Sim/pretraining/person_sequence
+
+  # Path where train data was stored using the GeneralPretrainedModelTools package:
+  train_data_folder: e:/GPM_Sim/train
+
+  # Names of the sub folders holding the labels of the train data:
+  train_label_sub_folders:
+  - label_c1000000
+  - label_c1000011
+  - label_c1000022
+  - label_c1000033
+  - label_c1000044
+  - label_c1000055
+  - label_c1000066
+  - label_c1000077
+  - label_c1000088
+  - label_c1000099
+
+  # Path where train data was stored using the GeneralPretrainedModelTools package:
+  test_data_folder: e:/GPM_Sim/test
+
+  # Names of the sub folders holding the labels of the train data:
+  test_label_sub_folders:
+  - label_c1000000
+  - label_c1000011
+  - label_c1000022
+  - label_c1000033
+  - label_c1000044
+  - label_c1000055
+  - label_c1000066
+  - label_c1000077
+  - label_c1000088
+  - label_c1000099
+
+  # Maximum number of CPU cores to use:
+  max_cores: 5
+
+  # Batch size for training and testing: (default: 32)
+  batch_size: 32
+
+  checkpoint_every: 50
+
+pretrained models:
+- name: pretrained_model_1
+  learning objectives:
+    masked_concept_learning: yes
+    mask_one_concept_per_visit: yes
+    masked_visit_concept_learning: yes
+    truncate_type: random
+    label_prediction: no
+  training:
+    train_fraction: 0.8
+    num_epochs: 100
+    num_freeze_epochs: 1
+    learning_rate: 0.001
+    weight_decay: 0.01
+    max_batches:
+  model:
+    max_sequence_length: 512
+    concept_embedding: yes
+    segment_embedding: yes
+    age_embedding: yes
+    date_embedding: yes
+    visit_order_embedding: yes
+    visit_concept_embedding: yes
+    hidden_size: 768
+    num_hidden_layers: 12
+    num_attention_heads: 12
+    intermediate_size: 3072
+    hidden_act: gelu
+    embedding_combination_method: sum
+    hidden_dropout_prob: 0.1
+    attention_probs_dropout_prob: 0.1
+- name: pretrained_model_2
+  learning objectives:
+    masked_concept_learning: yes
+    mask_one_concept_per_visit: yes
+    masked_visit_concept_learning: yes
+    truncate_type: random
+    label_prediction: no
+  training:
+    train_fraction: 0.8
+    num_epochs: 100
+    num_freeze_epochs: 1
+    learning_rate: 0.001
+    weight_decay: 0.01
+    max_batches:
+  model:
+    max_sequence_length: 512
+    concept_embedding: yes
+    segment_embedding: yes
+    age_embedding: yes
+    date_embedding: yes
+    visit_order_embedding: yes
+    visit_concept_embedding: yes
+    hidden_size: 768
+    num_hidden_layers: 12
+    num_attention_heads: 12
+    intermediate_size: 3072
+    hidden_act: gelu
+    embedding_combination_method: concat
+    hidden_dropout_prob: 0.1
+    attention_probs_dropout_prob: 0.1
+
+fine-tuned models:
+- name: fine_tuned_model_1
+  pretrained models:
+  - name: pretrained_model_1
+    pretrained_epoch: 100
+  - name: pretrained_model_1
+    pretrained_epoch: 50
+  - name: pretrained_model_2
+  learning objectives:
+    label_prediction: yes
+    truncate_type: tail
+  training:
+    train_fraction: 1
+    num_epochs: 100
+    num_freeze_epochs: 1
+    learning_rate: 0.001
+    weight_decay: 0.01
+    max_batches:
+- name: fine_tuned_model_2
+  pretrained models:
+  - name: pretrained_model_1
+  - name: pretrained_model_2
+  learning objectives:
+    label_prediction: yes
+    truncate_type: tail
+  training:
+    train_fraction: 1
+    num_epochs: 100
+    num_freeze_epochs: 0
+    learning_rate: 0.001
+    weight_decay: 0.01
+    max_batches:

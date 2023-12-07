@@ -38,6 +38,8 @@ class ApolloDataset(data.IterableDataset):
             train_test_split: The fraction of the data that should be used for training. The rest is used for testing.
             is_train: If true, this class will return the training data, otherwise the test data.
         """
+        if not os.path.exists(folder):
+            raise ValueError(f"Folder '{folder}' does not exist")
         self._folder = folder
         self._data_transformer = data_transformer
         self._train_test_split = train_test_split

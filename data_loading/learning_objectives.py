@@ -1,41 +1,19 @@
 import logging
 import random
-from abc import ABC, abstractmethod
-from typing import Dict
+from abc import abstractmethod
+from typing import Dict, List, Union
 
 import numpy as np
 import torch
 from torch.utils.tensorboard import SummaryWriter
+import sklearn.metrics as metrics
 
+from data_loading.model_inputs import ModelInput, prefix_and_pad
 from data_loading.tokenizer import ConceptTokenizer
 from data_loading.variable_names import ModelInputNames, DataNames, ModelOutputNames
-
+from utils.row import Row
 
 IGNORE_INDEX = -1
-
-
-def _prefix_and_pad(sequence: np.ndarray[any],
-                    prefix_value: any,
-                    padding_value: any,
-                    max_sequence_length: int
-                    ) -> np.ndarray[any]:
-    """
-    Add a prefix and pad a sequence to a given length.
-
-    Args
-        sequence: The sequence to pad.
-        prefix_value: The value to prefix with.
-        max_sequence_length: The length to pad to (after prefixing).
-        adding_value: The value to pad with.
-    Returns
-        The padded sequence.
-    """
-    n_to_pad = max_sequence_length - len(sequence) - 1  # Subtract one for the prefix
-    if n_to_pad > 0:
-        sequence = np.concatenate(([prefix_value], sequence, [padding_value] * n_to_pad), dtype=sequence.dtype)
-    else:
-        sequence = np.concatenate(([prefix_value], sequence), dtype=sequence.dtype)
-    return sequence
 
 
 class TokenPredictionPerformance:
@@ -61,7 +39,10 @@ class TokenPredictionPerformance:
     def get_mean_accuracy(self) -> float:
         return self.sum_accuracy / self.n
 
-    def report_metrics(self, train: bool, objective_label: str, writer, epoch) -> None:
+    def report_metrics(self,
+                       train: bool,
+                       objective_label: str,
+                       writer: [SummaryWriter, Row, None], epoch: int) -> None:
         label = "train" if train else "validation"
         label += " " + objective_label
         logging.info("Epoch %d %s mean loss: %0.2f, mean accuracy: %0.2f%%",
@@ -69,12 +50,80 @@ class TokenPredictionPerformance:
                      label,
                      self.get_mean_loss(),
                      100 * self.get_mean_accuracy())
-        writer.add_scalar(f"{label} mean loss",
-                          self.get_mean_loss(),
-                          epoch)
-        writer.add_scalar(f"{label} mean accuracy",
-                          self.get_mean_accuracy(),
-                          epoch)
+        if isinstance(writer, SummaryWriter):
+            writer.add_scalar(f"{label} mean loss",
+                              self.get_mean_loss(),
+                              epoch)
+            writer.add_scalar(f"{label} mean accuracy",
+                              self.get_mean_accuracy(),
+                              epoch)
+        elif isinstance(writer, Row):
+            writer.put_value(f"{label} mean loss", self.get_mean_loss())
+            writer.put_value(f"{label} mean accuracy", self.get_mean_accuracy())
+
+
+class BinaryPredictionPerformance:
+
+    def __init__(self):
+        self.sum_loss: float = 0
+        self.predictions: list = []
+        self.labels: list = []
+
+    def add(self, loss: float, prediction: List[float], label: List[float]) -> None:
+        self.sum_loss += loss
+        self.predictions.extend(prediction)
+        self.labels.extend(label)
+
+    def reset(self) -> None:
+        self.sum_loss = 0
+        self.predictions = []
+        self.labels = []
+
+    def get_mean_loss(self) -> float:
+        return self.sum_loss / len(self.predictions)
+
+    def get_auc(self) -> float:
+        fpr, tpr, thresholds = metrics.roc_curve(self.labels, self.predictions)
+        return metrics.auc(fpr, tpr)
+
+    def get_auprc(self) -> float:
+        return metrics.average_precision_score(self.labels, self.predictions)
+
+    def get_brier_score(self) -> float:
+        return metrics.brier_score_loss(self.labels, self.predictions)
+
+    def report_metrics(self,
+                       train: bool,
+                       objective_label: str,
+                       writer: [SummaryWriter, Row, None],
+                       epoch: int) -> None:
+        label = "train" if train else "validation"
+        label += " " + objective_label
+        logging.info("Epoch %d %s mean loss: %0.2f, AUC: %0.2f, AUPRC: %0.2f, Brier score: %0.2f",
+                     epoch,
+                     label,
+                     self.get_mean_loss(),
+                     self.get_auc(),
+                     self.get_auprc(),
+                     self.get_brier_score())
+        if isinstance(writer, SummaryWriter):
+            writer.add_scalar(f"{label} mean loss",
+                              self.get_mean_loss(),
+                              epoch)
+            writer.add_scalar(f"{label} AUC",
+                              self.get_auc(),
+                              epoch)
+            writer.add_scalar(f"{label} AUPRC",
+                              self.get_auprc(),
+                              epoch)
+            writer.add_scalar(f"{label} Brier score",
+                              self.get_brier_score(),
+                              epoch)
+        elif isinstance(writer, Row):
+            writer.put_value(f"{label} mean loss", self.get_mean_loss())
+            writer.put_value(f"{label} AUC", self.get_auc())
+            writer.put_value(f"{label} AUPRC", self.get_auprc())
+            writer.put_value(f"{label} Brier score", self.get_brier_score())
 
 
 def _masked_token_accuracy(token_predictions: torch.Tensor, token_ids: torch.Tensor) -> float:
@@ -84,28 +133,12 @@ def _masked_token_accuracy(token_predictions: torch.Tensor, token_ids: torch.Ten
     return (masked_predictions == masked_labels).float().mean().item()
 
 
-class LearningObjective(ABC):
+class LearningObjective(ModelInput):
     """
     A learning objective is a task that can be learned from the data. For example, predicting the next visit. This
-    class is used to generate the data for the learning objective.
+    class is used to generate the output data for the learning objective, as well as to compute the loss for the
+    learning objective.
     """
-
-    @abstractmethod
-    def process_row(self, row: Dict, start_index: int, end_index: int, max_sequence_length: int) -> tuple[Dict, Dict]:
-        """
-        Process a row to generate input and output data for the learning objective. The start and end index indicate
-        a sequence with maximum length max_sequence_length - 1 to allow prefixing with a classification token.
-
-        Args
-            row: The row to process, as generated by the CDM processing.
-            start_index: Any sequence in the row should start at this index.
-            end_index: Any sequence in the row should end at this index.
-            max_sequence_length: The maximum length of any sequence.
-
-        Returns
-            Two dictonaries to be used by pytorch. The first is the input, the second is the output.
-        """
-        pass
 
     @abstractmethod
     def compute_loss(self, outputs: Dict[str, torch.Tensor], predictions: Dict[str, torch.Tensor]) -> torch.Tensor:
@@ -128,7 +161,7 @@ class LearningObjective(ABC):
         pass
 
     @abstractmethod
-    def report_performance_metrics(self, train: bool, writer: SummaryWriter, epoch: int) -> None:
+    def report_performance_metrics(self, train: bool, writer: [SummaryWriter, Row], epoch: int) -> None:
         """
         Report the performance metrics.
         Args:
@@ -159,65 +192,29 @@ class MaskedConceptLearningObjective(LearningObjective):
         self._criterion = torch.nn.CrossEntropyLoss(ignore_index=IGNORE_INDEX)
         self._performance = TokenPredictionPerformance()
 
-    def process_row(self, row: Dict, start_index: int, end_index: int, max_sequence_length: int) -> tuple[Dict, Dict]:
+    def process_row(self,
+                    row: Dict,
+                    start_index: int,
+                    end_index: int,
+                    max_sequence_length: int) -> Dict[str, Union[np.ndarray, float]]:
         # Truncate the sequences:
         concept_ids = np.array(row[DataNames.CONCEPT_IDS][start_index:end_index])
-        visit_segments = np.array(row[DataNames.VISIT_SEGMENTS][start_index:end_index])
-        dates = np.array(row[DataNames.DATES][start_index:end_index], dtype=np.float32)
-        ages = np.array(row[DataNames.AGES][start_index:end_index], dtype=np.float32)
         visit_concept_orders = np.array(row[DataNames.VISIT_CONCEPT_ORDERS][start_index:end_index])
-
-        # Tokenize the concepts:
         token_ids = self._tokenizer.encode(concept_ids)
-        # Normalize the visit_orders using the smallest visit_concept_orders. Add 1 for CLS:
-        visit_concept_orders = visit_concept_orders - min(visit_concept_orders) + 1
-        # Mask the tokens IDs:
         masked_token_ids, masked_token_mask = self._mask_tokens(token_ids, visit_concept_orders)
-
-        # Prefix and pad the sequences:
-        token_ids = _prefix_and_pad(sequence=token_ids,
-                                    prefix_value=self._tokenizer.get_classification_token_id(),
-                                    padding_value=self._tokenizer.get_padding_token_id(),
-                                    max_sequence_length=max_sequence_length)
-        padding_mask = _prefix_and_pad(sequence=np.zeros(shape=concept_ids.shape, dtype=bool),
-                                       prefix_value=False,
-                                       padding_value=True,
-                                       max_sequence_length=max_sequence_length)
-        masked_token_ids = _prefix_and_pad(sequence=masked_token_ids,
-                                           prefix_value=self._tokenizer.get_classification_token_id(),
-                                           padding_value=self._tokenizer.get_padding_token_id(),
+        masked_token_ids = prefix_and_pad(sequence=masked_token_ids,
+                                          prefix_value=self._tokenizer.get_classification_token_id(),
+                                          padding_value=self._tokenizer.get_padding_token_id(),
+                                          max_sequence_length=max_sequence_length)
+        masked_token_mask = prefix_and_pad(sequence=masked_token_mask,
+                                           prefix_value=True,
+                                           padding_value=True,
                                            max_sequence_length=max_sequence_length)
-        masked_token_mask = _prefix_and_pad(sequence=masked_token_mask,
-                                            prefix_value=True,
-                                            padding_value=True,
-                                            max_sequence_length=max_sequence_length)
-        visit_segments = _prefix_and_pad(sequence=visit_segments,
-                                         prefix_value=0,
-                                         padding_value=0,
-                                         max_sequence_length=max_sequence_length)
-        dates = _prefix_and_pad(sequence=dates,
-                                prefix_value=0,
-                                padding_value=0,
-                                max_sequence_length=max_sequence_length)
-        ages = _prefix_and_pad(sequence=ages,
-                               prefix_value=0,
-                               padding_value=0,
-                               max_sequence_length=max_sequence_length)
-        visit_concept_orders = _prefix_and_pad(sequence=visit_concept_orders,
-                                               prefix_value=0,
-                                               padding_value=max_sequence_length - 1,
-                                               max_sequence_length=max_sequence_length)
-
-        # Create the input and output dictionaries:
-        inputs = {ModelInputNames.MASKED_TOKEN_IDS: masked_token_ids,
-                  ModelInputNames.PADDING_MASK: padding_mask,
-                  ModelInputNames.DATES: dates,
-                  ModelInputNames.AGES: ages,
-                  ModelInputNames.VISIT_SEGMENTS: visit_segments,
-                  ModelInputNames.VISIT_CONCEPT_ORDERS: visit_concept_orders}
-        outputs = {ModelInputNames.TOKEN_IDS: token_ids,
-                   ModelInputNames.MASKED_TOKEN_MASK: masked_token_mask}
-        return inputs, outputs
+        model_inputs = {
+            ModelInputNames.MASKED_TOKEN_IDS: masked_token_ids,
+            ModelInputNames.MASKED_TOKEN_MASK: masked_token_mask
+        }
+        return model_inputs
 
     def _mask_tokens(self,
                      token_ids: np.ndarray[int],
@@ -255,7 +252,7 @@ class MaskedConceptLearningObjective(LearningObjective):
     def reset_performance_metrics(self) -> None:
         self._performance.reset()
 
-    def report_performance_metrics(self, train: bool, writer: SummaryWriter, epoch: int) -> None:
+    def report_performance_metrics(self, train: bool, writer: [SummaryWriter, Row], epoch: int) -> None:
         self._performance.report_metrics(train, "masked concept", writer, epoch)
 
 
@@ -271,37 +268,28 @@ class MaskedVisitConceptLearningObjective(LearningObjective):
         self._criterion = torch.nn.CrossEntropyLoss(ignore_index=IGNORE_INDEX)
         self._performance = TokenPredictionPerformance()
 
-    def process_row(self, row: Dict, start_index: int, end_index: int, max_sequence_length: int) -> tuple[Dict, Dict]:
+    def process_row(self,
+                    row: Dict,
+                    start_index: int,
+                    end_index: int,
+                    max_sequence_length: int) -> Dict[str, Union[np.ndarray, float]]:
         visit_concept_ids = np.array(row[DataNames.VISIT_CONCEPT_IDS][start_index:end_index])
-
-        # Tokenize the visit concepts
         visit_token_ids = np.array(self._tokenizer.encode(visit_concept_ids))
-        # Mask visit tokens
         masked_visit_token_ids, masked_visit_token_mask = self._mask_visit_tokens(visit_token_ids)
-
-        # Pad the sequences
-        visit_token_ids = _prefix_and_pad(sequence=visit_token_ids,
-                                          prefix_value=self._tokenizer.get_classification_token_id(),
-                                          padding_value=self._tokenizer.get_padding_token_id(),
-                                          max_sequence_length=max_sequence_length)
-        masked_visit_token_ids = _prefix_and_pad(sequence=masked_visit_token_ids,
-                                                 prefix_value=self._tokenizer.get_classification_token_id(),
-                                                 padding_value=self._tokenizer.get_padding_token_id(),
+        masked_visit_token_ids = prefix_and_pad(sequence=masked_visit_token_ids,
+                                                prefix_value=self._tokenizer.get_classification_token_id(),
+                                                padding_value=self._tokenizer.get_padding_token_id(),
+                                                max_sequence_length=max_sequence_length)
+        masked_visit_token_mask = prefix_and_pad(sequence=masked_visit_token_mask,
+                                                 prefix_value=True,
+                                                 padding_value=True,
                                                  max_sequence_length=max_sequence_length)
-        masked_visit_token_mask = _prefix_and_pad(sequence=masked_visit_token_mask,
-                                                  prefix_value=True,
-                                                  padding_value=True,
-                                                  max_sequence_length=max_sequence_length)
 
-        # Create the input and output dicts
-        inputs = {
-            ModelInputNames.MASKED_VISIT_TOKEN_IDS: masked_visit_token_ids
-        }
-        outputs = {
-            ModelInputNames.VISIT_TOKEN_IDS: visit_token_ids,
+        model_inputs = {
+            ModelInputNames.MASKED_VISIT_TOKEN_IDS: masked_visit_token_ids,
             ModelInputNames.MASKED_VISIT_TOKEN_MASK: masked_visit_token_mask
         }
-        return inputs, outputs
+        return model_inputs
 
     def _mask_visit_tokens(self,
                            visit_token_ids: np.ndarray[int]
@@ -328,98 +316,42 @@ class MaskedVisitConceptLearningObjective(LearningObjective):
     def reset_performance_metrics(self) -> None:
         self._performance.reset()
 
-    def report_performance_metrics(self, train: bool, writer: SummaryWriter, epoch: int) -> None:
+    def report_performance_metrics(self, train: bool, writer: [SummaryWriter, Row], epoch: int) -> None:
         self._performance.report_metrics(train, "masked visit", writer, epoch)
 
 
 class LabelPredictionLearningObjective(LearningObjective):
 
-    def __init__(
-            self,
-            concept_tokenizer: ConceptTokenizer,
-            visit_tokenizer: ConceptTokenizer
-    ):
+    def __init__(self):
         """
         Initialization
-        Args:
-            concept_tokenizer: The tokenizer to use to tokenize the concepts. Should already be trained.
-               visit_tokenizer: The tokenizer to use to tokenize the visits. Should already be trained.
         """
-        self._concept_tokenizer = concept_tokenizer
-        self._visit_tokenizer = visit_tokenizer
-        self._criterion = torch.nn.CrossEntropyLoss()
-        self._performance = TokenPredictionPerformance()
+        self._criterion = torch.nn.BCELoss()
+        self._performance = BinaryPredictionPerformance()
 
-    def process_row(self, row: Dict, start_index: int, end_index: int, max_sequence_length: int) -> tuple[Dict, Dict]:
-        # Truncate the sequences:
-        concept_ids = np.array(row[DataNames.CONCEPT_IDS][start_index:end_index])
-        visit_segments = np.array(row[DataNames.VISIT_SEGMENTS][start_index:end_index])
-        dates = np.array(row[DataNames.DATES][start_index:end_index], dtype=np.float32)
-        ages = np.array(row[DataNames.AGES][start_index:end_index], dtype=np.float32)
-        visit_concept_orders = np.array(row[DataNames.VISIT_CONCEPT_ORDERS][start_index:end_index])
-        visit_concept_ids = np.array(row[DataNames.VISIT_CONCEPT_IDS][start_index:end_index])
-        label = row[DataNames.LABEL]
-
-        # Tokenize:
-        token_ids = self._concept_tokenizer.encode(concept_ids)
-        visit_token_ids = np.array(self._visit_tokenizer.encode(visit_concept_ids))
-
-        # Normalize the visit_orders using the smallest visit_concept_orders. Add 1 for CLS:
-        visit_concept_orders = visit_concept_orders - min(visit_concept_orders) + 1
-
-        # Prefix and pad the sequences:
-        token_ids = _prefix_and_pad(sequence=token_ids,
-                                    prefix_value=self._concept_tokenizer.get_classification_token_id(),
-                                    padding_value=self._concept_tokenizer.get_padding_token_id(),
-                                    max_sequence_length=max_sequence_length)
-        padding_mask = _prefix_and_pad(sequence=np.zeros(shape=concept_ids.shape, dtype=bool),
-                                       prefix_value=False,
-                                       padding_value=True,
-                                       max_sequence_length=max_sequence_length)
-        visit_segments = _prefix_and_pad(sequence=visit_segments,
-                                         prefix_value=0,
-                                         padding_value=0,
-                                         max_sequence_length=max_sequence_length)
-        dates = _prefix_and_pad(sequence=dates,
-                                prefix_value=0,
-                                padding_value=0,
-                                max_sequence_length=max_sequence_length)
-        ages = _prefix_and_pad(sequence=ages,
-                               prefix_value=0,
-                               padding_value=0,
-                               max_sequence_length=max_sequence_length)
-        visit_concept_orders = _prefix_and_pad(sequence=visit_concept_orders,
-                                               prefix_value=0,
-                                               padding_value=max_sequence_length - 1,
-                                               max_sequence_length=max_sequence_length)
-        visit_token_ids = _prefix_and_pad(sequence=visit_token_ids,
-                                          prefix_value=self._visit_tokenizer.get_classification_token_id(),
-                                          padding_value=self._visit_tokenizer.get_padding_token_id(),
-                                          max_sequence_length=max_sequence_length)
-
-        # Create the input and output dictionaries:
-        inputs = {ModelInputNames.TOKEN_IDS: token_ids,
-                  ModelInputNames.PADDING_MASK: padding_mask,
-                  ModelInputNames.DATES: dates,
-                  ModelInputNames.AGES: ages,
-                  ModelInputNames.VISIT_SEGMENTS: visit_segments,
-                  ModelInputNames.VISIT_CONCEPT_ORDERS: visit_concept_orders,
-                  ModelInputNames.VISIT_TOKEN_IDS: visit_token_ids}
-        outputs = {ModelInputNames.FINETUNE_LABEL: label}
-        return inputs, outputs
+    def process_row(self,
+                    row: Dict,
+                    start_index: int,
+                    end_index: int,
+                    max_sequence_length: int) -> Dict[str, Union[np.ndarray, float]]:
+        label = np.float32(row[DataNames.LABEL])
+        model_inputs = {
+            ModelInputNames.FINETUNE_LABEL: label
+        }
+        return model_inputs
 
     def compute_loss(self, outputs: Dict[str, torch.Tensor], predictions: Dict[str, torch.Tensor]) -> torch.Tensor:
         label_predictions = predictions[ModelOutputNames.LABEL_PREDICTIONS]
-        labels = outputs[ModelInputNames.FINETUNE_LABEL].long()
+        labels = outputs[ModelInputNames.FINETUNE_LABEL]
 
-        loss = self._criterion(label_predictions, labels)
-        visit_token_accuracy = _masked_token_accuracy(label_predictions.unsqueeze(1), labels.unsqueeze(1))
+        loss = self._criterion(torch.squeeze(label_predictions), labels.float())
         self._performance.add(loss=loss.float().mean().item(),
-                              accuracy=visit_token_accuracy)
+                              prediction=label_predictions.detach().cpu().tolist(),
+                              label=labels.detach().cpu().tolist())
         return loss
 
     def reset_performance_metrics(self) -> None:
         self._performance.reset()
 
-    def report_performance_metrics(self, train: bool, writer: SummaryWriter, epoch: int) -> None:
+    def report_performance_metrics(self, train: bool, writer: [SummaryWriter, Row], epoch: int) -> None:
         self._performance.report_metrics(train, "label prediction", writer, epoch)

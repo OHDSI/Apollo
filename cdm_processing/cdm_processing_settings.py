@@ -1,26 +1,37 @@
 from configparser import ConfigParser
-from dataclasses import dataclass
-from typing import List
+from dataclasses import dataclass, asdict
+from typing import List, Dict, Any, Optional
+
+import yaml
 
 
 @dataclass
-class CdmProcesingSettings:
-    cdm_data_path: str
-    label_subfolder: str
-    max_cores: int
-    output_path: str
+class MappingSettings:
     map_drugs_to_ingredients: bool
     concepts_to_remove: List[int]
-    profile: bool
     has_labels: bool
 
-    def __init__(self, config: ConfigParser):
-        self.cdm_data_path = config.get("system", "cdm_data_path")
-        self.label_subfolder = config.get("system", "label_subfolder")
-        self.max_cores = config.getint("system", "max_cores")
-        self.output_path = config.get("system", "output_path")
-        self.map_drugs_to_ingredients = config.getboolean("mapping", "map_drugs_to_ingredients")
-        self.concepts_to_remove = [int(x) for x in config["mapping"].get("concepts_to_remove").split(",")]
-        self.has_labels = config.getboolean("mapping", "has_labels")
-        self.profile = config.getboolean("debug", "profile")
 
+@dataclass
+class CdmProcessingSettings:
+    cdm_data_path: str
+    label_sub_folder: str
+    max_cores: int
+    output_path: str
+    mapping_settings: MappingSettings
+    profile: bool
+
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        if config is None:
+            return
+        system = config["system"]
+        for key, value in system.items():
+            setattr(self, key, value)
+        self.mapping_settings = MappingSettings(**config["mapping"])
+        system = config["debug"]
+        for key, value in system.items():
+            setattr(self, key, value)
+
+    def write_mapping_settings(self, filename: str) -> None:
+        with open(filename, "w") as config_file:
+            yaml.dump(asdict(self.mapping_settings), config_file)

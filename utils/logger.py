@@ -2,6 +2,7 @@ import dataclasses
 import logging
 import sys
 from dataclasses import fields
+from typing import Any
 
 
 def _add_stream_handler(logger: logging.Logger):
@@ -62,7 +63,6 @@ def handle_exception(exc_type, exc_value, exc_traceback):
         logger = logging.getLogger()
         logger.critical("Uncaught exception", exc_info=(exc_type, exc_value, exc_traceback))
     sys.__excepthook__(exc_type, exc_value, exc_traceback)
-
 
 def log_settings(settings: dataclasses):
     logging.info("Settings:")

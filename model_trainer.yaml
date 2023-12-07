@@ -1,0 +1,94 @@
+system:
+  # Path where data was stored using the CdmProcessor class:
+  sequence_data_folder: d:/GPM_Sim/pretraining/person_sequence
+
+  # Path where the model files will be written:
+  output_folder: d:/GPM_Sim/pretraining/model
+
+  # Path to a pre-trained model files to load. If empty, a new model will be created:
+  pretrained_model_folder:
+
+  # Batch size for training and testing: (default: 32)
+  batch_size: 32
+
+  # Save the model every checkpoint_every epochs:
+  checkpoint_every: 10
+
+  # If specified, load this specific epoch of the pretrained model. Else the last epoch is loaded:
+  pretrained_epoch:
+
+
+learning objectives:
+  # Predict a random subset of the input concepts that are masked out:
+  masked_concept_learning: yes
+
+  # For masked concept learning, only mask at most one concept per visit:
+  mask_one_concept_per_visit: yes
+
+  # Predict a random subset of the input visit concepts that are masked out:
+  masked_visit_concept_learning: yes
+
+  # If the input sequence is longer than max_sequence_length, truncate the sequence "random" or keep the "tail":
+  truncate_type: random
+
+  # Predict a given label for each person:
+  label_prediction: no
+
+  # Use a simple regression model instead of a transformer model: (default: no)
+  simple_regression_model: no
+
+
+training:
+  # Fraction of the data to use for training. Set to 1 to skip evaluation:
+  train_fraction: 0.8
+
+  # Number of epochs to train for:
+  num_epochs: 100
+
+  # Number of epochs to freeze the pre-trained model for (if pretrained_model_folder is not empty):
+  num_freeze_epochs: 1
+
+  # Learning rate for the Adam optimizer:
+  learning_rate: 0.001
+
+  # Weight decay for the Adam optimizer:
+  weight_decay: 0.01
+
+  # If specified, the maximum number of batches to use for training. Use to evaluate effect of having fewer data:
+  max_batches:
+
+model:
+  # The maximum length of the input sequence: (default: 512)
+  max_sequence_length: 512
+
+  # Use the following embeddings: (default: yes)
+  concept_embedding: yes
+  segment_embedding: yes
+  age_embedding: yes
+  date_embedding: yes
+  visit_order_embedding: yes
+  visit_concept_embedding: yes
+
+  # Size of hidden layers: (default: 768)
+  hidden_size: 768
+
+  # Number of hidden layers: (default: 12)
+  num_hidden_layers: 12
+
+  # Number of attention heads: (default: 12)
+  num_attention_heads: 12
+
+  # Size of intermediate layers: (default: 3072)
+  intermediate_size: 3072
+
+  # Type of activation function used in the intermediate layer. Can be "gelu" or "relu": (default: gelu)
+  hidden_act: gelu
+
+  # Type of embedding combination method. Can be "sum" or "concat": (default: sum)
+  embedding_combination_method: sum
+
+  # Dropout probability for the hidden layers: (default: 0.1)
+  hidden_dropout_prob: 0.1
+
+  # Dropout probability for the attention layer: (default: 0.1)
+  attention_probs_dropout_prob: 0.1

@@ -73,4 +73,8 @@ print(f"Shady visits: {shady_visits}")
 print(f"Shady visits: {shady_visits / total_visits}")
 
 
-
+import pandas as pd
+import pyarrow.parquet as pq
+import os
+full = pd.read_parquet("e:/gpm_sim/train/label_c1000022")
+full["label"].value_counts()
