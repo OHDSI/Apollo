@@ -43,6 +43,7 @@ system:
   # Batch size for training and testing: (default: 32)
   batch_size: 32
 
+  # Save the model every checkpoint_every epochs:
   checkpoint_every: 50
 
 pretrained models:
@@ -59,7 +60,6 @@ pretrained models:
     num_freeze_epochs: 1
     learning_rate: 0.001
     weight_decay: 0.01
-    max_batches:
   model:
     max_sequence_length: 256
     concept_embedding: yes
@@ -90,7 +90,6 @@ pretrained models:
     num_freeze_epochs: 1
     learning_rate: 0.001
     weight_decay: 0.01
-    max_batches:
   model:
     max_sequence_length: 256
     concept_embedding: yes
@@ -121,7 +120,6 @@ pretrained models:
     num_freeze_epochs: 1
     learning_rate: 0.001
     weight_decay: 0.01
-    max_batches:
   model:
     max_sequence_length: 256
     concept_embedding: yes
@@ -152,7 +150,6 @@ pretrained models:
     num_freeze_epochs: 1
     learning_rate: 0.001
     weight_decay: 0.01
-    max_batches:
   model:
     max_sequence_length: 256
     concept_embedding: yes
@@ -183,7 +180,6 @@ pretrained models:
     num_freeze_epochs: 1
     learning_rate: 0.001
     weight_decay: 0.01
-    max_batches:
   model:
     max_sequence_length: 256
     concept_embedding: yes
@@ -214,7 +210,6 @@ pretrained models:
     num_freeze_epochs: 1
     learning_rate: 0.001
     weight_decay: 0.01
-    max_batches:
   model:
     max_sequence_length: 256
     concept_embedding: yes
@@ -245,7 +240,6 @@ pretrained models:
     num_freeze_epochs: 1
     learning_rate: 0.001
     weight_decay: 0.01
-    max_batches:
   model:
     max_sequence_length: 256
     concept_embedding: yes
@@ -276,7 +270,6 @@ pretrained models:
     num_freeze_epochs: 1
     learning_rate: 0.001
     weight_decay: 0.01
-    max_batches:
   model:
     max_sequence_length: 256
     concept_embedding: yes
