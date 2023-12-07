@@ -291,7 +291,7 @@ class ModelTrainer:
         file_name = _find_latest_checkpoint(self._settings.output_folder)
         if file_name is None:
             if (self._settings.pretrained_model_folder is not None and
-                    not self._settings.model_settings.simple_regression_model):
+                    not self._settings.learning_objective_settings.simple_regression_model):
                 if self._settings.pretrained_epoch is not None:
                     file_name = os.path.join(self._settings.pretrained_model_folder,
                                              _get_file_name(self._settings.pretrained_epoch))
