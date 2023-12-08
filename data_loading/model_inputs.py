@@ -2,13 +2,14 @@ from abc import ABC, abstractmethod
 from typing import Dict, Optional, Union
 
 import numpy as np
+from numpy._typing import NDArray
 
 from data_loading.tokenizer import ConceptTokenizer
 from data_loading.variable_names import DataNames, ModelInputNames
 from model.model_settings import ModelSettings
 
 
-def prefix_and_pad(sequence: np.ndarray[any],
+def prefix_and_pad(sequence: NDArray[any],
                    prefix_value: any,
                    padding_value: any,
                    max_sequence_length: int
@@ -86,7 +87,7 @@ class InputTransformer(ModelInput):
         model_inputs = {}
 
         if self._model_settings.concept_embedding:
-            concept_ids = np.array(row[DataNames.CONCEPT_IDS][start_index:end_index])
+            concept_ids = np.array(row[DataNames.CONCEPT_IDS][start_index:end_index], dtype=str)
             token_ids = self._tokenizer.encode(concept_ids)
             token_ids = prefix_and_pad(sequence=token_ids,
                                        prefix_value=self._tokenizer.get_classification_token_id(),
@@ -95,7 +96,7 @@ class InputTransformer(ModelInput):
             model_inputs[ModelInputNames.TOKEN_IDS] = token_ids
 
         if self._model_settings.visit_concept_embedding:
-            visit_ids = np.array(row[DataNames.VISIT_CONCEPT_IDS][start_index:end_index])
+            visit_ids = np.array(row[DataNames.VISIT_CONCEPT_IDS][start_index:end_index], dtype=str)
             visit_token_ids = self._visit_tokenizer.encode(visit_ids)
             visit_token_ids = prefix_and_pad(sequence=visit_token_ids,
                                              prefix_value=self._visit_tokenizer.get_classification_token_id(),
@@ -137,9 +138,9 @@ class InputTransformer(ModelInput):
                                    max_sequence_length=max_sequence_length)
             model_inputs[ModelInputNames.DATES] = dates
 
-        padding_mask = prefix_and_pad(sequence=np.zeros(shape=end_index - start_index, dtype=bool),
-                                      prefix_value=False,
-                                      padding_value=True,
+        padding_mask = prefix_and_pad(sequence=np.zeros(shape=end_index - start_index, dtype=np.float32),
+                                      prefix_value=0,
+                                      padding_value=-np.inf,
                                       max_sequence_length=max_sequence_length)
         model_inputs[ModelInputNames.PADDING_MASK] = padding_mask
 

@@ -3,7 +3,7 @@ from typing import List, Dict, Union
 
 import numpy as np
 
-from data_loading.learning_objectives import LearningObjective
+from data_loading.learning_objectives import LearningObjective, NextTokenLearningObjective
 from data_loading.model_inputs import InputTransformer
 
 SEQUENCE_LENGTH_COLUMN_NAME = "num_of_concepts"
@@ -27,6 +27,10 @@ class ApolloDataTransformer:
         if truncate_type not in TRUNCATE_TYPES:
             raise ValueError(f"Unknown truncate type: {truncate_type}. Must be one of {TRUNCATE_TYPES}")
         self._learning_objectives = learning_objectives
+        self._keep_next_token = False
+        for learning_objective in learning_objectives:
+            if isinstance(learning_objective, NextTokenLearningObjective):
+                self._keep_next_token = True
         self._input_transformer = input_transformer
         self._max_sequence_length = max_sequence_length
         self._truncate_type = truncate_type
@@ -61,10 +65,10 @@ class ApolloDataTransformer:
         """
         seq_length = row[SEQUENCE_LENGTH_COLUMN_NAME]
         new_max_length = self._max_sequence_length - 1  # Subtract one for the [CLS] token
+        next_token_offset = 1 if self._keep_next_token else 0
         if seq_length > new_max_length and self._truncate_type == "random":
-            # Note: to match most likely use cases, we should probably sample to end at end of a visit
-            start_index = random.randint(0, seq_length - new_max_length)
-            end_index = min(seq_length, start_index + new_max_length)
+            start_index = random.randint(0, seq_length - new_max_length - next_token_offset)
+            end_index = min(seq_length - next_token_offset, start_index + new_max_length)
             return start_index, end_index
         else:
-            return max(0, seq_length - new_max_length), seq_length
+            return max(0, seq_length - new_max_length - next_token_offset), seq_length - next_token_offset

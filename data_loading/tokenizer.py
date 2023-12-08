@@ -1,5 +1,6 @@
 import json
 
+from numpy._typing import NDArray
 from torch.utils.data import Dataset
 from typing import List
 
@@ -43,7 +44,7 @@ class ConceptTokenizer:
         self._padding_token_index = self._word_index[PADDING_TOKEN]
         self._mask_token_index = self._word_index[MASK_TOKEN]
 
-    def encode(self, concept_ids: np.ndarray[str]) -> np.ndarray[np.int64]:
+    def encode(self, concept_ids: NDArray[str]) -> NDArray[np.int64]:
         result = np.empty(len(concept_ids), dtype=np.int64)
         for i in range(len(concept_ids)):
             idx = self._word_index.get(concept_ids[i])

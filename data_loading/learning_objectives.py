@@ -355,3 +355,47 @@ class LabelPredictionLearningObjective(LearningObjective):
 
     def report_performance_metrics(self, train: bool, writer: [SummaryWriter, Row], epoch: int) -> None:
         self._performance.report_metrics(train, "label prediction", writer, epoch)
+
+
+class NextTokenLearningObjective(LearningObjective):
+
+    def __init__(self, concept_tokenizer: ConceptTokenizer):
+        """
+        Initialization
+        Args:
+            concept_tokenizer: The tokenizer to use to tokenize the concepts.
+        """
+        self._tokenizer = concept_tokenizer
+        self._criterion = torch.nn.CrossEntropyLoss()
+        self._performance = TokenPredictionPerformance()
+
+    def process_row(self,
+                    row: Dict,
+                    start_index: int,
+                    end_index: int,
+                    max_sequence_length: int) -> Dict[str, Union[np.ndarray, float]]:
+        concept_ids = np.array(row[DataNames.CONCEPT_IDS][(start_index + 1):(end_index + 1)], dtype=str)
+        token_ids = self._tokenizer.encode(concept_ids)
+        token_ids = prefix_and_pad(sequence=token_ids,
+                                   prefix_value=self._tokenizer.get_classification_token_id(),
+                                   padding_value=self._tokenizer.get_padding_token_id(),
+                                   max_sequence_length=max_sequence_length)
+        model_inputs = {
+            ModelInputNames.NEXT_TOKEN_IDS: token_ids,
+        }
+        return model_inputs
+
+    def compute_loss(self, outputs: Dict[str, torch.Tensor], predictions: Dict[str, torch.Tensor]) -> torch.Tensor:
+        next_token_prediction = predictions[ModelOutputNames.NEXT_TOKEN_PREDICTION]
+        next_token_ids = outputs[ModelInputNames.NEXT_TOKEN_IDS]
+        loss = self._criterion(next_token_prediction.transpose(1, 2), next_token_ids)
+        token_accuracy = _masked_token_accuracy(next_token_prediction, next_token_ids)
+        self._performance.add(loss=loss.float().mean().item(),
+                              accuracy=token_accuracy)
+        return loss
+
+    def reset_performance_metrics(self) -> None:
+        self._performance.reset()
+
+    def report_performance_metrics(self, train: bool, writer: [SummaryWriter, Row], epoch: int) -> None:
+        self._performance.report_metrics(train, "next token", writer, epoch)

@@ -29,6 +29,7 @@ class ModelInputNames:
     VISIT_TOKEN_IDS = "visit_token_ids"
     MASKED_VISIT_TOKEN_IDS = "masked_visit_token_ids"
     MASKED_VISIT_TOKEN_MASK = "mask_visit_token_mask"
+    NEXT_TOKEN_IDS = "next_token_ids"
     FINETUNE_LABEL = "finetune_label"
     
     
@@ -38,4 +39,5 @@ class ModelOutputNames:
     """
     TOKEN_PREDICTIONS = "token_predictions"
     VISIT_TOKEN_PREDICTIONS = "visit_token_predictions"
+    NEXT_TOKEN_PREDICTION = "next_token_prediction"
     LABEL_PREDICTIONS = "label_predictions"

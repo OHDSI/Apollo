@@ -36,6 +36,10 @@ CONCEPT_TOKENIZER_FILE_NAME = "_concept_tokenizer.json"
 VISIT_CONCEPT_TOKENIZER_FILE_NAME = "_visit_concept_tokenizer.json"
 
 
+def _is_debugging():
+    return not (sys.gettrace() is None)
+
+
 def _dict_to_device(data: Dict[str, torch.Tensor], device: torch.device) -> Dict[str, torch.Tensor]:
     return {key: value.to(device, non_blocking=True) for key, value in data.items()}
 
@@ -84,6 +88,9 @@ class ModelTrainer:
                 visit_concept_tokenizer=self._visit_concept_tokenizer))
         if settings.learning_objective_settings.label_prediction:
             self._learning_objectives.append(learning_objectives.LabelPredictionLearningObjective())
+        if settings.learning_objective_settings.next_token_prediction:
+            self._learning_objectives.append(learning_objectives.NextTokenLearningObjective(
+                concept_tokenizer=self._concept_tokenizer))
 
         # Get data sets:
         self._train_data, self._test_data = self._get_data_sets()
@@ -92,7 +99,11 @@ class ModelTrainer:
         if torch.cuda.is_available():
             self._device = torch.device("cuda")
         elif torch.backends.mps.is_available():
-            self._device = torch.device("mps")
+            if _is_debugging():
+                print("WARNING: Debugging doesn't seem to work with MPS, falling back to CPU")
+                self._device = torch.device("cpu")
+            else:
+                self._device = torch.device("mps")
         else:
             self._device = torch.device("cpu")
         if self._settings.learning_objective_settings.simple_regression_model:

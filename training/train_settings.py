@@ -12,6 +12,7 @@ class LearningObjectiveSettings:
     masked_concept_learning: bool = False
     mask_one_concept_per_visit: bool = False
     masked_visit_concept_learning: bool = False
+    next_token_prediction: bool = False
     simple_regression_model: bool = False
 
     def __post_init__(self):
@@ -55,8 +56,11 @@ class ModelTrainingSettings:
     def __post_init__(self):
         if self.learning_objective_settings.masked_concept_learning and not self.model_settings.concept_embedding:
             raise ValueError("Must have concept embedding if masked_concept_learning is true")
-        if self.learning_objective_settings.masked_visit_concept_learning and not self.model_settings.visit_concept_embedding:
+        if (self.learning_objective_settings.masked_visit_concept_learning and
+                not self.model_settings.visit_concept_embedding):
             raise ValueError("Must have visit concept embedding if masked_visit_concept_learning is true")
+        if self.learning_objective_settings.next_token_prediction and not self.model_settings.concept_embedding:
+            raise ValueError("Must have concept embedding if next_token_prediction is true")
         if self.learning_objective_settings.simple_regression_model:
             if self.learning_objective_settings.label_prediction:
                 raise ValueError("Must have label prediction if simple_regression_model is true")
@@ -64,6 +68,11 @@ class ModelTrainingSettings:
                     self.learning_objective_settings.masked_visit_concept_learning):
                 raise ValueError("Masked concept learning and masked visit concept learning are not implemented "
                                  "for the simple regression model.")
+        if self.learning_objective_settings.next_token_prediction:
+            if (self.learning_objective_settings.label_prediction or
+                    self.learning_objective_settings.masked_concept_learning or
+                    self.learning_objective_settings.masked_visit_concept_learning):
+                raise ValueError("Cannot combine next token prediction with any of the other learning objectives.")
 
     def write_model_settings(self, filename: str) -> None:
         with open(filename, "w") as config_file:

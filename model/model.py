@@ -81,13 +81,17 @@ class TransformerModel(nn.Module):
                                                   out_features=tokenizer.get_vocab_size())
             self.masked_token_decoder.bias.data.zero_()
             nn.init.xavier_uniform_(self.masked_token_decoder.weight)
-            # Alternatively, decoder is shared with embedding layer:
-            # self.masked_token_decoder.weight = self.token_embeddings.weight
         if learning_objective_settings.masked_visit_concept_learning:
             self.masked_visit_token_decoder = nn.Linear(in_features=model_settings.hidden_size,
                                                         out_features=visit_tokenizer.get_vocab_size())
             self.masked_visit_token_decoder.bias.data.zero_()
             nn.init.xavier_uniform_(self.masked_visit_token_decoder.weight)
+        if learning_objective_settings.next_token_prediction:
+            self.next_token_decoder = nn.Linear(in_features=model_settings.hidden_size,
+                                                out_features=tokenizer.get_vocab_size())
+            self.next_token_decoder.bias.data.zero_()
+            nn.init.xavier_uniform_(self.next_token_decoder.weight)
+            self.src_mask = nn.Transformer.generate_square_subsequent_mask(model_settings.max_sequence_length)
         if learning_objective_settings.label_prediction:
             self.label_decoder = nn.Linear(in_features=model_settings.hidden_size,
                                            out_features=1)
@@ -138,7 +142,13 @@ class TransformerModel(nn.Module):
         embeddings = self.layer_norm(embeddings)
         embeddings = self.dropout(embeddings)
 
-        encoded = self.transformer_encoder(src=embeddings, src_key_padding_mask=inputs[ModelInputNames.PADDING_MASK])
+        if self.learning_objective_settings.next_token_prediction:
+            encoded = self.transformer_encoder(src=embeddings,
+                                               mask=self.src_mask,
+                                               src_key_padding_mask=inputs[ModelInputNames.PADDING_MASK],
+                                               is_causal=True)
+        else:
+            encoded = self.transformer_encoder(src=embeddings, src_key_padding_mask=inputs[ModelInputNames.PADDING_MASK])
 
         predictions = {}
         if self.learning_objective_settings.masked_concept_learning:
@@ -147,6 +157,9 @@ class TransformerModel(nn.Module):
         if self.learning_objective_settings.masked_visit_concept_learning:
             # No softmax here, as it's included in CrossEntropyLoss:
             predictions[ModelOutputNames.VISIT_TOKEN_PREDICTIONS] = self.masked_visit_token_decoder(encoded)
+        if self.learning_objective_settings.next_token_prediction:
+            # No softmax here, as it's included in CrossEntropyLoss:
+            predictions[ModelOutputNames.NEXT_TOKEN_PREDICTION] = self.next_token_decoder(encoded)
         if self.learning_objective_settings.label_prediction:
             predictions[ModelOutputNames.LABEL_PREDICTIONS] = torch.sigmoid(self.label_decoder(encoded[:, 0, :]))
         return predictions
@@ -167,3 +180,9 @@ class TransformerModel(nn.Module):
 
     def is_frozen(self):
         return self._frozen
+
+    def to(self, device: torch.device):
+        super().to(device)
+        self.src_mask = self.src_mask.to(device)
+        return self
+

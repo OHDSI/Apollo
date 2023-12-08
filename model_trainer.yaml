@@ -31,6 +31,9 @@ learning objectives:
   # If the input sequence is longer than max_sequence_length, truncate the sequence "random" or keep the "tail":
   truncate_type: random
 
+  # Predict the next token in the sequence:
+  next_token_prediction: no
+
   # Predict a given label for each person:
   label_prediction: no
 
