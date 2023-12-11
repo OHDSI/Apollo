@@ -53,7 +53,6 @@ pretrained models:
     mask_one_concept_per_visit: yes
     masked_visit_concept_learning: yes
     truncate_type: random
-    label_prediction: no
   training:
     train_fraction: 0.8
     num_epochs: 100
@@ -83,7 +82,6 @@ pretrained models:
     mask_one_concept_per_visit: yes
     masked_visit_concept_learning: yes
     truncate_type: random
-    label_prediction: no
   training:
     train_fraction: 0.8
     num_epochs: 100
@@ -113,7 +111,6 @@ pretrained models:
     mask_one_concept_per_visit: yes
     masked_visit_concept_learning: yes
     truncate_type: random
-    label_prediction: no
   training:
     train_fraction: 0.8
     num_epochs: 100
@@ -143,7 +140,6 @@ pretrained models:
     mask_one_concept_per_visit: yes
     masked_visit_concept_learning: no
     truncate_type: random
-    label_prediction: no
   training:
     train_fraction: 0.8
     num_epochs: 100
@@ -173,7 +169,6 @@ pretrained models:
     mask_one_concept_per_visit: no
     masked_visit_concept_learning: yes
     truncate_type: random
-    label_prediction: no
   training:
     train_fraction: 0.8
     num_epochs: 100
@@ -203,7 +198,6 @@ pretrained models:
     mask_one_concept_per_visit: yes
     masked_visit_concept_learning: yes
     truncate_type: random
-    label_prediction: no
   training:
     train_fraction: 0.8
     num_epochs: 100
@@ -233,7 +227,6 @@ pretrained models:
     mask_one_concept_per_visit: yes
     masked_visit_concept_learning: yes
     truncate_type: random
-    label_prediction: no
   training:
     train_fraction: 0.8
     num_epochs: 100
@@ -263,7 +256,33 @@ pretrained models:
     mask_one_concept_per_visit: yes
     masked_visit_concept_learning: yes
     truncate_type: random
-    label_prediction: no
+  training:
+    train_fraction: 0.8
+    num_epochs: 100
+    num_freeze_epochs: 1
+    learning_rate: 0.001
+    weight_decay: 0.01
+  model:
+    max_sequence_length: 256
+    concept_embedding: yes
+    segment_embedding: yes
+    age_embedding: yes
+    date_embedding: yes
+    visit_order_embedding: yes
+    visit_concept_embedding: yes
+    hidden_size: 200
+    num_hidden_layers: 2
+    num_attention_heads: 2
+    intermediate_size: 100
+    hidden_act: gelu
+    embedding_combination_method: sum
+    hidden_dropout_prob: 0.1
+    attention_probs_dropout_prob: 0.1
+
+- name: gpt
+  learning objectives:
+    next_token_prediction: yes
+    truncate_type: random
   training:
     train_fraction: 0.8
     num_epochs: 100
@@ -301,6 +320,7 @@ fine-tuned models:
   - name: hidden_size_200
   - name: reference
     pretrained_epoch: 50
+  - name: gpt
   learning objectives:
     label_prediction: yes
     truncate_type: tail

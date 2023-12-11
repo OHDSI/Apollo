@@ -8,9 +8,9 @@ from model.model_settings import ModelSettings
 @dataclass
 class LearningObjectiveSettings:
     truncate_type: str
-    label_prediction: bool
+    label_prediction: bool = False
     masked_concept_learning: bool = False
-    mask_one_concept_per_visit: bool = False
+    mask_one_concept_per_visit: bool = True
     masked_visit_concept_learning: bool = False
     next_token_prediction: bool = False
     simple_regression_model: bool = False

@@ -92,6 +92,8 @@ class TransformerModel(nn.Module):
             self.next_token_decoder.bias.data.zero_()
             nn.init.xavier_uniform_(self.next_token_decoder.weight)
             self.src_mask = nn.Transformer.generate_square_subsequent_mask(model_settings.max_sequence_length)
+        else:
+            self.src_mask = None
         if learning_objective_settings.label_prediction:
             self.label_decoder = nn.Linear(in_features=model_settings.hidden_size,
                                            out_features=1)
@@ -183,6 +185,7 @@ class TransformerModel(nn.Module):
 
     def to(self, device: torch.device):
         super().to(device)
-        self.src_mask = self.src_mask.to(device)
+        if self.src_mask is not None:
+            self.src_mask = self.src_mask.to(device)
         return self
 
