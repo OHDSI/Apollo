@@ -5,10 +5,11 @@ from typing import Dict, List, Union
 
 import numpy as np
 import torch
+from numpy.typing import NDArray
 from torch.utils.tensorboard import SummaryWriter
 import sklearn.metrics as metrics
 
-from data_loading.model_inputs import ModelInput, prefix_and_pad
+from data_loading.model_inputs import ModelInput, prefix_and_pad, find_last_index
 from data_loading.tokenizer import ConceptTokenizer
 from data_loading.variable_names import ModelInputNames, DataNames, ModelOutputNames
 from utils.row import Row
@@ -133,6 +134,13 @@ def _masked_token_accuracy(token_predictions: torch.Tensor, token_ids: torch.Ten
     return (masked_predictions == masked_labels).float().mean().item()
 
 
+def _predicted_tokens_accuracy(tokens_predictions: torch.Tensor, visit_token_set: torch.Tensor) -> float:
+    probabilities = torch.sigmoid(tokens_predictions)
+    threshold = 0.5  # Probability threshold for a token to be considered predicted
+    predictions = (probabilities > threshold)
+    return (predictions == visit_token_set).float().mean().item()
+
+
 class LearningObjective(ModelInput):
     """
     A learning objective is a task that can be learned from the data. For example, predicting the next visit. This
@@ -196,7 +204,7 @@ class MaskedConceptLearningObjective(LearningObjective):
                     row: Dict,
                     start_index: int,
                     end_index: int,
-                    max_sequence_length: int) -> Dict[str, Union[np.ndarray, float]]:
+                    max_sequence_length: int) -> Dict[str, Union[NDArray, float]]:
         # Truncate the sequences:
         concept_ids = np.array(row[DataNames.CONCEPT_IDS][start_index:end_index])
         visit_concept_orders = np.array(row[DataNames.VISIT_CONCEPT_ORDERS][start_index:end_index])
@@ -217,9 +225,9 @@ class MaskedConceptLearningObjective(LearningObjective):
         return model_inputs
 
     def _mask_tokens(self,
-                     token_ids: np.ndarray[int],
-                     visit_concept_orders: np.ndarray[int]
-                     ) -> tuple[np.ndarray, np.ndarray]:
+                     token_ids: NDArray[int],
+                     visit_concept_orders: NDArray[int]
+                     ) -> tuple[NDArray, NDArray]:
         masked_token_ids = token_ids.copy()
         masked_token_mask = np.ones(len(token_ids), dtype=bool)
         last_visit_order = 0
@@ -272,7 +280,7 @@ class MaskedVisitConceptLearningObjective(LearningObjective):
                     row: Dict,
                     start_index: int,
                     end_index: int,
-                    max_sequence_length: int) -> Dict[str, Union[np.ndarray, float]]:
+                    max_sequence_length: int) -> Dict[str, Union[NDArray, float]]:
         visit_concept_ids = np.array(row[DataNames.VISIT_CONCEPT_IDS][start_index:end_index])
         visit_token_ids = np.array(self._tokenizer.encode(visit_concept_ids))
         masked_visit_token_ids, masked_visit_token_mask = self._mask_visit_tokens(visit_token_ids)
@@ -292,8 +300,8 @@ class MaskedVisitConceptLearningObjective(LearningObjective):
         return model_inputs
 
     def _mask_visit_tokens(self,
-                           visit_token_ids: np.ndarray[int]
-                           ) -> tuple[np.ndarray, np.ndarray]:
+                           visit_token_ids: NDArray[int]
+                           ) -> tuple[NDArray, NDArray]:
         masked_visit_token_ids = np.asarray(visit_token_ids).copy()
         masked_visit_token_mask = np.ones(len(visit_token_ids), dtype=bool)
         for word_pos in range(0, len(visit_token_ids)):
@@ -333,7 +341,7 @@ class LabelPredictionLearningObjective(LearningObjective):
                     row: Dict,
                     start_index: int,
                     end_index: int,
-                    max_sequence_length: int) -> Dict[str, Union[np.ndarray, float]]:
+                    max_sequence_length: int) -> Dict[str, Union[NDArray, float]]:
         label = np.float32(row[DataNames.LABEL])
         model_inputs = {
             ModelInputNames.FINETUNE_LABEL: label
@@ -373,7 +381,7 @@ class NextTokenLearningObjective(LearningObjective):
                     row: Dict,
                     start_index: int,
                     end_index: int,
-                    max_sequence_length: int) -> Dict[str, Union[np.ndarray, float]]:
+                    max_sequence_length: int) -> Dict[str, Union[NDArray, float]]:
         concept_ids = np.array(row[DataNames.CONCEPT_IDS][(start_index + 1):(end_index + 1)], dtype=str)
         token_ids = self._tokenizer.encode(concept_ids)
         token_ids = prefix_and_pad(sequence=token_ids,
@@ -399,3 +407,48 @@ class NextTokenLearningObjective(LearningObjective):
 
     def report_performance_metrics(self, train: bool, writer: [SummaryWriter, Row], epoch: int) -> None:
         self._performance.report_metrics(train, "next token", writer, epoch)
+
+
+class NextVisitConceptsLearningObjective(LearningObjective):
+
+    def __init__(self, concept_tokenizer: ConceptTokenizer):
+        """
+        Initialization
+        Args:
+            concept_tokenizer: The tokenizer to use to tokenize the concepts.
+        """
+        self._tokenizer = concept_tokenizer
+        self._criterion = torch.nn.BCEWithLogitsLoss()
+        self._performance = TokenPredictionPerformance()
+
+    def process_row(self,
+                    row: Dict,
+                    start_index: int,
+                    end_index: int,
+                    max_sequence_length: int) -> Dict[str, Union[NDArray, float]]:
+        start_next_visit_index = end_index + 1
+        next_visit = row[DataNames.VISIT_CONCEPT_ORDERS][start_next_visit_index]
+        end_next_visit_index = find_last_index(row[DataNames.VISIT_CONCEPT_ORDERS], next_visit) + 1
+        concept_ids = np.array(row[DataNames.CONCEPT_IDS][start_next_visit_index:end_next_visit_index], dtype=str)
+        token_ids = self._tokenizer.encode(concept_ids)
+        next_visit_token_set = np.zeros(self._tokenizer.get_vocab_size(), dtype=np.float32)
+        next_visit_token_set[token_ids] = 1
+        model_inputs = {
+            ModelInputNames.NEXT_VISIT_TOKEN_SET: next_visit_token_set,
+        }
+        return model_inputs
+
+    def compute_loss(self, outputs: Dict[str, torch.Tensor], predictions: Dict[str, torch.Tensor]) -> torch.Tensor:
+        next_visit_tokens_prediction = predictions[ModelOutputNames.NEXT_VISIT_TOKENS_PREDICTION]
+        next_visit_token_set = outputs[ModelInputNames.NEXT_VISIT_TOKEN_SET]
+        loss = self._criterion(next_visit_tokens_prediction, next_visit_token_set)
+        token_accuracy = +_predicted_tokens_accuracy(next_visit_tokens_prediction, next_visit_token_set)
+        self._performance.add(loss=loss.float().mean().item(),
+                              accuracy=token_accuracy)
+        return loss
+
+    def reset_performance_metrics(self) -> None:
+        self._performance.reset()
+
+    def report_performance_metrics(self, train: bool, writer: [SummaryWriter, Row], epoch: int) -> None:
+        self._performance.report_metrics(train, "next visit tokens", writer, epoch)

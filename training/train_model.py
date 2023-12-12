@@ -61,6 +61,19 @@ def _find_latest_checkpoint(folder: str) -> Optional[str]:
     return checkpoint
 
 
+def _select_device():
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    elif torch.backends.mps.is_available():
+        if _is_debugging():
+            print("WARNING: Debugging doesn't seem to work with MPS, falling back to CPU")
+            return torch.device("cpu")
+        else:
+            return torch.device("mps")
+    else:
+        return torch.device("cpu")
+
+
 class ModelTrainer:
 
     def __init__(self, settings: ModelTrainingSettings):
@@ -78,34 +91,15 @@ class ModelTrainer:
                                                                         field_name=DataNames.VISIT_CONCEPT_IDS)
 
         # Get learning objectives:
-        self._learning_objectives = []
-        if settings.learning_objective_settings.masked_concept_learning:
-            self._learning_objectives.append(learning_objectives.MaskedConceptLearningObjective(
-                concept_tokenizer=self._concept_tokenizer,
-                one_mask_per_visit=self._settings.learning_objective_settings.mask_one_concept_per_visit))
-        if settings.learning_objective_settings.masked_visit_concept_learning:
-            self._learning_objectives.append(learning_objectives.MaskedVisitConceptLearningObjective(
-                visit_concept_tokenizer=self._visit_concept_tokenizer))
-        if settings.learning_objective_settings.label_prediction:
-            self._learning_objectives.append(learning_objectives.LabelPredictionLearningObjective())
-        if settings.learning_objective_settings.next_token_prediction:
-            self._learning_objectives.append(learning_objectives.NextTokenLearningObjective(
-                concept_tokenizer=self._concept_tokenizer))
+        self._learning_objectives = self.initialize_learning_objectives()
 
         # Get data sets:
         self._train_data, self._test_data = self._get_data_sets()
 
+        # Select device:
+        self._device = _select_device()
+
         # Get model and optimizer:
-        if torch.cuda.is_available():
-            self._device = torch.device("cuda")
-        elif torch.backends.mps.is_available():
-            if _is_debugging():
-                print("WARNING: Debugging doesn't seem to work with MPS, falling back to CPU")
-                self._device = torch.device("cpu")
-            else:
-                self._device = torch.device("mps")
-        else:
-            self._device = torch.device("cpu")
         if self._settings.learning_objective_settings.simple_regression_model:
             self._model = SimpleRegressionModel(model_settings=self._settings.model_settings,
                                                 learning_objective_settings=self._settings.learning_objective_settings,
@@ -142,6 +136,25 @@ class ModelTrainer:
                 concept_tokenizer.fit_on_concept_sequences(train_data, field_name)
                 concept_tokenizer.save_to_json(json_file)
         return concept_tokenizer
+
+    def initialize_learning_objectives(self) -> List[learning_objectives.LearningObjective]:
+        learning_objective_list = []
+        if self._settings.learning_objective_settings.masked_concept_learning:
+            learning_objective_list.append(learning_objectives.MaskedConceptLearningObjective(
+                concept_tokenizer=self._concept_tokenizer,
+                one_mask_per_visit=self._settings.learning_objective_settings.mask_one_concept_per_visit))
+        if self._settings.learning_objective_settings.masked_visit_concept_learning:
+            learning_objective_list.append(learning_objectives.MaskedVisitConceptLearningObjective(
+                visit_concept_tokenizer=self._visit_concept_tokenizer))
+        if self._settings.learning_objective_settings.label_prediction:
+            learning_objective_list.append(learning_objectives.LabelPredictionLearningObjective())
+        if self._settings.learning_objective_settings.next_token_prediction:
+            learning_objective_list.append(learning_objectives.NextTokenLearningObjective(
+                concept_tokenizer=self._concept_tokenizer))
+        if self._settings.learning_objective_settings.next_visit_concepts_prediction:
+            learning_objective_list.append(learning_objectives.NextVisitConceptsLearningObjective(
+                concept_tokenizer=self._concept_tokenizer))
+        return learning_objective_list
 
     def _get_data_sets(self) -> Tuple[Optional[ApolloDataset], Optional[ApolloDataset]]:
         input_transformer = InputTransformer(concept_tokenizer=self._concept_tokenizer,
@@ -231,7 +244,7 @@ class ModelTrainer:
             self._writer.flush()
 
     def train_model(self) -> None:
-        # Write the model,  cdm_mapping config files and tokenizers to the output folder so the trained model can be
+        # Write the model, cdm_mapping config files and tokenizers to the output folder so the trained model can be
         # used without the original config and tokenizer files:
         self._settings.write_model_settings(os.path.join(self._settings.output_folder, "model.yaml"))
         shutil.copy2(os.path.join(self._settings.sequence_data_folder, "cdm_mapping.yaml"),

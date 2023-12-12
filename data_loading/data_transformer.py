@@ -3,10 +3,12 @@ from typing import List, Dict, Union
 
 import numpy as np
 
-from data_loading.learning_objectives import LearningObjective, NextTokenLearningObjective
-from data_loading.model_inputs import InputTransformer
+from data_loading.learning_objectives import (LearningObjective,
+                                              NextTokenLearningObjective,
+                                              NextVisitConceptsLearningObjective)
+from data_loading.model_inputs import InputTransformer, find_last_index
+from data_loading.variable_names import DataNames
 
-SEQUENCE_LENGTH_COLUMN_NAME = "num_of_concepts"
 TRUNCATE_TYPES = ["random", "tail"]
 
 
@@ -31,6 +33,12 @@ class ApolloDataTransformer:
         for learning_objective in learning_objectives:
             if isinstance(learning_objective, NextTokenLearningObjective):
                 self._keep_next_token = True
+        self._keep_next_visit = False
+        for learning_objective in learning_objectives:
+            if isinstance(learning_objective, NextVisitConceptsLearningObjective):
+                self._keep_next_visit = True
+        if self._keep_next_token and self._keep_next_visit:
+            raise ValueError("Cannot have both next token and next visit learning objectives")
         self._input_transformer = input_transformer
         self._max_sequence_length = max_sequence_length
         self._truncate_type = truncate_type
@@ -63,12 +71,20 @@ class ApolloDataTransformer:
         Returns:
             A tuple of begin and end indices.
         """
-        seq_length = row[SEQUENCE_LENGTH_COLUMN_NAME]
+        seq_length = row[DataNames.SEQUENCE_LENGTH]
         new_max_length = self._max_sequence_length - 1  # Subtract one for the [CLS] token
-        next_token_offset = 1 if self._keep_next_token else 0
-        if seq_length > new_max_length and self._truncate_type == "random":
-            start_index = random.randint(0, seq_length - new_max_length - next_token_offset)
-            end_index = min(seq_length - next_token_offset, start_index + new_max_length)
+        if self._keep_next_visit:
+            last_visit = row[DataNames.VISIT_CONCEPT_ORDERS][-1]
+            end_index = find_last_index(row[DataNames.VISIT_CONCEPT_ORDERS], last_visit - 1)
+            if end_index == -1:
+                return 0, 0
+            start_index = max(0, end_index - new_max_length)
             return start_index, end_index
         else:
-            return max(0, seq_length - new_max_length - next_token_offset), seq_length - next_token_offset
+            next_token_offset = 1 if self._keep_next_token else 0
+            if seq_length > new_max_length and self._truncate_type == "random":
+                start_index = random.randint(0, seq_length - new_max_length - next_token_offset)
+                end_index = min(seq_length - next_token_offset, start_index + new_max_length)
+                return start_index, end_index
+            else:
+                return max(0, seq_length - new_max_length - next_token_offset), seq_length - next_token_offset

@@ -13,6 +13,7 @@ class LearningObjectiveSettings:
     mask_one_concept_per_visit: bool = True
     masked_visit_concept_learning: bool = False
     next_token_prediction: bool = False
+    next_visit_concepts_prediction: bool = False
     simple_regression_model: bool = False
 
     def __post_init__(self):
@@ -24,9 +25,9 @@ class LearningObjectiveSettings:
 class TrainingSettings:
     train_fraction: float
     num_epochs: int
-    num_freeze_epochs: int
     learning_rate: float
     weight_decay: float
+    num_freeze_epochs: int = 0
     max_batches: Optional[int] = None
 
 
@@ -71,7 +72,8 @@ class ModelTrainingSettings:
         if self.learning_objective_settings.next_token_prediction:
             if (self.learning_objective_settings.label_prediction or
                     self.learning_objective_settings.masked_concept_learning or
-                    self.learning_objective_settings.masked_visit_concept_learning):
+                    self.learning_objective_settings.masked_visit_concept_learning or
+                    self.learning_objective_settings.next_visit_concepts_prediction):
                 raise ValueError("Cannot combine next token prediction with any of the other learning objectives.")
 
     def write_model_settings(self, filename: str) -> None:

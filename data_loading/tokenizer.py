@@ -1,6 +1,6 @@
 import json
 
-from numpy._typing import NDArray
+from numpy.typing import NDArray
 from torch.utils.data import Dataset
 from typing import List
 

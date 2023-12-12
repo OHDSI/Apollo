@@ -94,6 +94,11 @@ class TransformerModel(nn.Module):
             self.src_mask = nn.Transformer.generate_square_subsequent_mask(model_settings.max_sequence_length)
         else:
             self.src_mask = None
+        if learning_objective_settings.next_visit_concepts_prediction:
+            self.next_visit_tokens_decoder = nn.Linear(in_features=model_settings.hidden_size,
+                                                       out_features=tokenizer.get_vocab_size())
+            self.next_visit_tokens_decoder.bias.data.zero_()
+            nn.init.xavier_uniform_(self.next_visit_tokens_decoder.weight)
         if learning_objective_settings.label_prediction:
             self.label_decoder = nn.Linear(in_features=model_settings.hidden_size,
                                            out_features=1)
@@ -162,6 +167,9 @@ class TransformerModel(nn.Module):
         if self.learning_objective_settings.next_token_prediction:
             # No softmax here, as it's included in CrossEntropyLoss:
             predictions[ModelOutputNames.NEXT_TOKEN_PREDICTION] = self.next_token_decoder(encoded)
+        if self.learning_objective_settings.next_visit_concepts_prediction:
+            # No softmax here, as it's included in CrossEntropyLoss:
+            predictions[ModelOutputNames.NEXT_VISIT_TOKENS_PREDICTION] = self.next_visit_tokens_decoder(encoded[:, 0, :])
         if self.learning_objective_settings.label_prediction:
             predictions[ModelOutputNames.LABEL_PREDICTIONS] = torch.sigmoid(self.label_decoder(encoded[:, 0, :]))
         return predictions

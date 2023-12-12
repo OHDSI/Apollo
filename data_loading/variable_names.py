@@ -12,6 +12,7 @@ class DataNames:
     NUM_OF_CONCEPTS = "num_of_concepts"
     NUM_OF_VISITS = "num_of_visits"
     LABEL = "label"
+    SEQUENCE_LENGTH = "num_of_concepts"
 
 
 class ModelInputNames:
@@ -30,6 +31,7 @@ class ModelInputNames:
     MASKED_VISIT_TOKEN_IDS = "masked_visit_token_ids"
     MASKED_VISIT_TOKEN_MASK = "mask_visit_token_mask"
     NEXT_TOKEN_IDS = "next_token_ids"
+    NEXT_VISIT_TOKEN_SET = "next_visit_token_set"
     FINETUNE_LABEL = "finetune_label"
     
     
@@ -40,4 +42,5 @@ class ModelOutputNames:
     TOKEN_PREDICTIONS = "token_predictions"
     VISIT_TOKEN_PREDICTIONS = "visit_token_predictions"
     NEXT_TOKEN_PREDICTION = "next_token_prediction"
+    NEXT_VISIT_TOKENS_PREDICTION = "next_visit_tokens_prediction"
     LABEL_PREDICTIONS = "label_predictions"

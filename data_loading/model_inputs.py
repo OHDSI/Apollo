@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Optional, Union
+from typing import Dict, Optional, Union, List
 
 import numpy as np
-from numpy._typing import NDArray
+from numpy.typing import NDArray
 
 from data_loading.tokenizer import ConceptTokenizer
 from data_loading.variable_names import DataNames, ModelInputNames
@@ -13,7 +13,7 @@ def prefix_and_pad(sequence: NDArray[any],
                    prefix_value: any,
                    padding_value: any,
                    max_sequence_length: int
-                   ) -> np.ndarray[any]:
+                   ) -> NDArray[any]:
     """
     Add a prefix and pad a sequence to a given length.
 
@@ -31,6 +31,13 @@ def prefix_and_pad(sequence: NDArray[any],
     else:
         sequence = np.concatenate(([prefix_value], sequence), dtype=sequence.dtype)
     return sequence
+
+
+def find_last_index(lst: List[any], value: any):
+    for i in range(len(lst) - 1, -1, -1):
+        if lst[i] == value:
+            return i
+    return -1  # Return -1 if the value is not found
 
 
 class ModelInput(ABC):
