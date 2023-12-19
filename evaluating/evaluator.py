@@ -29,7 +29,6 @@ class Evaluator:
         self._cdm_mapping_config = configparser.ConfigParser()
         with open(os.path.join(settings.pretrained_model_folder, "cdm_mapping.yaml")) as file:
             self._mapping_settings = MappingSettings(**yaml.safe_load(file))
-        self._mapping_settings.has_labels = True
         with open(os.path.join(settings.pretrained_model_folder, "model.yaml")) as file:
             self._model_settings = ModelSettings(**yaml.safe_load(file))
 

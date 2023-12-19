@@ -3,7 +3,7 @@ system:
   cdm_data_path: d:/GPM_Sim/pretraining
   
   # If the data has labels, what is the name of the sub folder?:
-  label_sub_folder: label
+  label_sub_folder:
   
   # Maximum number of CPU cores to use:
   max_cores: 5
@@ -20,9 +20,6 @@ mapping:
   concepts_to_remove:
   - 0
   - 900000010
-
-  # Do the CDM data come with labels? (i.e. can they be used for fine-tuning a model?):
-  has_labels: no
 
 
 debug:

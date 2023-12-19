@@ -24,17 +24,11 @@ class CdmDataProcessor(AbstractCdmDataProcessor):
 
     def __init__(self, settings: CdmProcessingSettings):
         super().__init__(
-            cdm_data_path=settings.cdm_data_path,
-            output_path=settings.output_path,
-            max_cores=settings.max_cores,
-            has_labels=settings.mapping_settings.has_labels,
-            label_subfolder=settings.label_sub_folder
+            settings=settings
         )
         self._settings = settings
         if settings.mapping_settings.map_drugs_to_ingredients:
-            self._drug_mapping = cdm_utils.load_mapping_to_ingredients(self._cdm_data_path)
-        if settings.profile:
-            self.set_profile(True)
+            self._drug_mapping = cdm_utils.load_mapping_to_ingredients(self._settings.cdm_data_path)
         logger.log_settings(settings)
         settings.write_mapping_settings(os.path.join(settings.output_path, "cdm_mapping.yaml"))
 
@@ -62,7 +56,7 @@ class CdmDataProcessor(AbstractCdmDataProcessor):
         cdm_tables["visit_occurrence"] = visit_occurrence
         sequence_data = self._create_sequence_tables(cdm_tables=cdm_tables, event_table=event_table, labels=labels)
         file_name = "part{:04d}.parquet".format(partition_i + 1)
-        pq.write_table(sequence_data, os.path.join(self._output_path, file_name))
+        pq.write_table(sequence_data, os.path.join(self._settings.output_path, file_name))
 
         logging.debug("Partition %s persons: %s", partition_i, len(cdm_tables["person"]))
         logging.debug("Partition %s observation periods: %s", partition_i, len(cdm_tables["observation_period"]))
@@ -96,7 +90,7 @@ class CdmDataProcessor(AbstractCdmDataProcessor):
         con.register("observation_period_table", cdm_tables["observation_period"])
         con.register("person", cdm_tables["person"])
         con.register("event_table", event_table)
-        if self._settings.mapping_settings.has_labels:
+        if self._settings.label_sub_folder is not None:
             con.register("labels", labels)
         sql = "CREATE TABLE visits AS " \
               "SELECT visit_occurrence.*, " \
@@ -176,7 +170,7 @@ class CdmDataProcessor(AbstractCdmDataProcessor):
               "INNER JOIN person " \
               "  ON visits.person_id = person.person_id"
         con.execute(sql)
-        if self._settings.mapping_settings.has_labels:
+        if self._settings.label_sub_folder is not None:
             part1 = "  label, "
             part2 = "  INNER JOIN labels ON tokens.person_id = labels.person_id "
         else:
@@ -225,8 +219,7 @@ class CdmDataProcessor(AbstractCdmDataProcessor):
                      "orders",
                      "num_of_concepts",
                      "num_of_visits"]
-        if self._settings.mapping_settings.has_labels:
-            aggregate_list.append(("label", "any"))
+        if self._settings.label_sub_folder is not None:
             name_list.append("label")
         sequence_data = union_tokens.group_by("observation_period_id"). \
             aggregate(aggregate_list). \

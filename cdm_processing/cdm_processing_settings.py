@@ -9,17 +9,16 @@ import yaml
 class MappingSettings:
     map_drugs_to_ingredients: bool
     concepts_to_remove: List[int]
-    has_labels: bool
 
 
 @dataclass
 class CdmProcessingSettings:
     cdm_data_path: str
-    label_sub_folder: str
     max_cores: int
     output_path: str
     mapping_settings: MappingSettings
     profile: bool
+    label_sub_folder: Optional[str] = None
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         if config is None:
@@ -28,8 +27,8 @@ class CdmProcessingSettings:
         for key, value in system.items():
             setattr(self, key, value)
         self.mapping_settings = MappingSettings(**config["mapping"])
-        system = config["debug"]
-        for key, value in system.items():
+        debug = config["debug"]
+        for key, value in debug.items():
             setattr(self, key, value)
 
     def write_mapping_settings(self, filename: str) -> None:
