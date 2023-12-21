@@ -166,12 +166,12 @@ class CdmData:
 
 class _Labels:
 
-    person_id: DynamicArray
+    observation_period_id: DynamicArray
     label: DynamicArray
 
     def __init__(self):
         super().__init__()
-        self.person_id = DynamicArray(np.int64)
+        self.observation_period_id = DynamicArray(np.int64)
         self.label = DynamicArray(bool)
 
 
@@ -181,18 +181,18 @@ class CdmDataWithLabels(CdmData):
         super().__init__()
         self._concept_id_to_labels: defaultdict[int, _Labels] = defaultdict(_Labels)
 
-    def add_label(self, person_id: int, concept_id: int, label: bool):
+    def add_label(self, observation_period_id: int, concept_id: int, label: bool):
         labels = self._concept_id_to_labels[concept_id]
-        labels.person_id.append(person_id)
+        labels.observation_period_id.append(observation_period_id)
         labels.label.append(label)
 
     def write_to_parquet(self, root_folder: str, partition_i: int):
         super().write_to_parquet(root_folder, partition_i)
         for concept_id, labels in self._concept_id_to_labels.items():
             table = pa.Table.from_arrays(arrays=[
-                labels.person_id.collect(),
+                labels.observation_period_id.collect(),
                 labels.label.collect()],
-                names=["person_id", "label"])
+                names=["observation_period_id", "label"])
             folder_name = "label_c{:04d}".format(concept_id)
             _create_folder_if_not_exists(os.path.join(root_folder, folder_name))
             file_name = "part{:04d}.parquet".format(partition_i + 1)

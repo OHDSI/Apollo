@@ -48,7 +48,7 @@ system:
 
 pretrained models:
 - name: reference
-  learning objectives:
+  learning_objectives:
     masked_concept_learning: yes
     mask_one_concept_per_visit: yes
     masked_visit_concept_learning: yes
@@ -76,7 +76,7 @@ pretrained models:
     attention_probs_dropout_prob: 0.1
 
 - name: concat
-  learning objectives:
+  learning_objectives:
     masked_concept_learning: yes
     mask_one_concept_per_visit: yes
     masked_visit_concept_learning: yes
@@ -104,7 +104,7 @@ pretrained models:
     attention_probs_dropout_prob: 0.1
 
 - name: no_segments
-  learning objectives:
+  learning_objectives:
     masked_concept_learning: yes
     mask_one_concept_per_visit: yes
     masked_visit_concept_learning: yes
@@ -132,7 +132,7 @@ pretrained models:
     attention_probs_dropout_prob: 0.1
     
 - name: no_visit_pred
-  learning objectives:
+  learning_objectives:
     masked_concept_learning: yes
     mask_one_concept_per_visit: yes
     masked_visit_concept_learning: no
@@ -160,7 +160,7 @@ pretrained models:
     attention_probs_dropout_prob: 0.1
     
 - name: mask_multi_concepts
-  learning objectives:
+  learning_objectives:
     masked_concept_learning: yes
     mask_one_concept_per_visit: no
     masked_visit_concept_learning: yes
@@ -188,7 +188,7 @@ pretrained models:
     attention_probs_dropout_prob: 0.1
     
 - name: four_hidden_layers
-  learning objectives:
+  learning_objectives:
     masked_concept_learning: yes
     mask_one_concept_per_visit: yes
     masked_visit_concept_learning: yes
@@ -216,7 +216,7 @@ pretrained models:
     attention_probs_dropout_prob: 0.1
     
 - name: four_att_heads
-  learning objectives:
+  learning_objectives:
     masked_concept_learning: yes
     mask_one_concept_per_visit: yes
     masked_visit_concept_learning: yes
@@ -244,7 +244,7 @@ pretrained models:
     attention_probs_dropout_prob: 0.1
     
 - name: hidden_size_200
-  learning objectives:
+  learning_objectives:
     masked_concept_learning: yes
     mask_one_concept_per_visit: yes
     masked_visit_concept_learning: yes
@@ -272,7 +272,7 @@ pretrained models:
     attention_probs_dropout_prob: 0.1
 
 - name: gpt
-  learning objectives:
+  learning_objectives:
     next_token_prediction: yes
     truncate_type: random
   training:
@@ -298,7 +298,7 @@ pretrained models:
     attention_probs_dropout_prob: 0.1
 
 - name: gpt_visit_concepts
-  learning objectives:
+  learning_objectives:
     next_visit_concepts_prediction: yes
     truncate_type: random
   training:
@@ -338,7 +338,7 @@ fine-tuned models:
     pretrained_epoch: 50
   - name: gpt
   - name: gpt_visit_concepts
-  learning objectives:
+  learning_objectives:
     label_prediction: yes
     truncate_type: tail
   training:
@@ -351,7 +351,7 @@ fine-tuned models:
 - name: no_freeze
   pretrained models:
   - name: reference
-  learning objectives:
+  learning_objectives:
     label_prediction: yes
     truncate_type: tail
   training:
@@ -364,7 +364,7 @@ fine-tuned models:
 - name: simple_regression
   pretrained models:
   - name: reference
-  learning objectives:
+  learning_objectives:
     label_prediction: yes
     truncate_type: tail
     simple_regression_model: yes

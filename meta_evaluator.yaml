@@ -47,7 +47,7 @@ system:
 
 pretrained models:
 - name: pretrained_model_1
-  learning objectives:
+  learning_objectives:
     masked_concept_learning: yes
     mask_one_concept_per_visit: yes
     masked_visit_concept_learning: yes
@@ -77,7 +77,7 @@ pretrained models:
     hidden_dropout_prob: 0.1
     attention_probs_dropout_prob: 0.1
 - name: pretrained_model_2
-  learning objectives:
+  learning_objectives:
     masked_concept_learning: yes
     mask_one_concept_per_visit: yes
     masked_visit_concept_learning: yes
@@ -115,7 +115,7 @@ fine-tuned models:
   - name: pretrained_model_1
     pretrained_epoch: 50
   - name: pretrained_model_2
-  learning objectives:
+  learning_objectives:
     label_prediction: yes
     truncate_type: tail
   training:
@@ -129,7 +129,7 @@ fine-tuned models:
   pretrained models:
   - name: pretrained_model_1
   - name: pretrained_model_2
-  learning objectives:
+  learning_objectives:
     label_prediction: yes
     truncate_type: tail
   training:

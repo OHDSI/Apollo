@@ -206,7 +206,7 @@ class Simulator:
                         logging.debug("Person %s visit on day %s with concept IDs: %s", person_id, t, concept_ids)
         if isinstance(self._cdm_data, cdm_data.CdmDataWithLabels):
             for i in range(len(self._prediction_idx)):
-                self._cdm_data.add_label(person_id=person_id,
+                self._cdm_data.add_label(observation_period_id=person_id,
                                          concept_id=self._concept_ids[self._prediction_idx[i]],
                                          label=prediction_labels[i])
 

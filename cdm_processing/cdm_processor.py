@@ -172,7 +172,7 @@ class CdmDataProcessor(AbstractCdmDataProcessor):
         con.execute(sql)
         if self._settings.label_sub_folder is not None:
             part1 = "  label, "
-            part2 = "  INNER JOIN labels ON tokens.person_id = labels.person_id "
+            part2 = "  INNER JOIN labels ON tokens.observation_period_id = labels.observation_period_id "
         else:
             part1 = ""
             part2 = ""

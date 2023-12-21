@@ -99,7 +99,7 @@ class TransformerModel(nn.Module):
                                                        out_features=tokenizer.get_vocab_size())
             self.next_visit_tokens_decoder.bias.data.zero_()
             nn.init.xavier_uniform_(self.next_visit_tokens_decoder.weight)
-        if learning_objective_settings.label_prediction:
+        if learning_objective_settings.label_prediction or learning_objective_settings.new_label_prediction:
             self.label_decoder = nn.Linear(in_features=model_settings.hidden_size,
                                            out_features=1)
             self.label_decoder.bias.data.zero_()
@@ -170,7 +170,7 @@ class TransformerModel(nn.Module):
         if self.learning_objective_settings.next_visit_concepts_prediction:
             # No softmax here, as it's included in CrossEntropyLoss:
             predictions[ModelOutputNames.NEXT_VISIT_TOKENS_PREDICTION] = self.next_visit_tokens_decoder(encoded[:, 0, :])
-        if self.learning_objective_settings.label_prediction:
+        if self.learning_objective_settings.label_prediction or self.learning_objective_settings.new_label_prediction:
             predictions[ModelOutputNames.LABEL_PREDICTIONS] = torch.sigmoid(self.label_decoder(encoded[:, 0, :]))
         return predictions
 

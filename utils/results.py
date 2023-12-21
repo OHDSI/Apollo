@@ -2,7 +2,7 @@ import csv
 from typing import List
 
 
-class Row:
+class Results:
 
     def __init__(self):
         self._fields: List[str] = []
@@ -16,4 +16,8 @@ class Row:
         with open(file_name, "w", encoding="UTF8", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(self._fields)
-            writer.writerow(self._values)
+            if isinstance(self._values[0], list):
+                for row in self._values:
+                    writer.writerow(row)
+            else:
+                writer.writerow(self._values)

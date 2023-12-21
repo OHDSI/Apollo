@@ -9,6 +9,7 @@ from model.model_settings import ModelSettings
 class LearningObjectiveSettings:
     truncate_type: str
     label_prediction: bool = False
+    new_label_prediction: bool = False
     masked_concept_learning: bool = False
     mask_one_concept_per_visit: bool = True
     masked_visit_concept_learning: bool = False
@@ -50,7 +51,7 @@ class ModelTrainingSettings:
         system = config["system"]
         for key, value in system.items():
             setattr(self, key, value)
-        self.learning_objective_settings = LearningObjectiveSettings(**config["learning objectives"])
+        self.learning_objective_settings = LearningObjectiveSettings(**config["learning_objectives"])
         self.training_settings = TrainingSettings(**config["training"])
         self.model_settings = ModelSettings(**config["model"])
 

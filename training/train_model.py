@@ -28,7 +28,7 @@ import data_loading.learning_objectives as learning_objectives
 import data_loading.tokenizer as tokenizer
 from data_loading.variable_names import DataNames
 from model.model import TransformerModel
-from utils.row import Row
+from utils.results import Results
 
 LOGGER_FILE_NAME = "_model_training_log.txt"
 BATCH_REPORT_INTERVAL = 1000
@@ -154,6 +154,8 @@ class ModelTrainer:
         if self._settings.learning_objective_settings.next_visit_concepts_prediction:
             learning_objective_list.append(learning_objectives.NextVisitConceptsLearningObjective(
                 concept_tokenizer=self._concept_tokenizer))
+        if self._settings.learning_objective_settings.new_label_prediction:
+            learning_objective_list.append(learning_objectives.NewLabelPredictionLearningObjective())
         return learning_objective_list
 
     def _get_data_sets(self) -> Tuple[Optional[ApolloDataset], Optional[ApolloDataset]]:
@@ -287,10 +289,13 @@ class ModelTrainer:
         else:
             self._load_checkpoint()
         self._run_model(train=False)
-        row = Row()
+        result = Results()
         for learning_objective in self._learning_objectives:
-            learning_objective.report_performance_metrics(train=False, writer=row, epoch=self._epoch)
-        row.write_to_csv(result_file)
+            learning_objective.report_performance_metrics(train=False, writer=result, epoch=self._epoch)
+        result.write_to_csv(result_file)
+
+    def predict(self, result_file: str, epoch: Optional[int] = None) -> None:
+        self.evaluate_model(result_file=result_file, epoch=epoch)
 
     def _save_checkpoint(self):
         file_name = os.path.join(self._settings.output_folder, _get_file_name(self._epoch))
