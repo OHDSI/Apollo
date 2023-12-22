@@ -221,6 +221,7 @@ class CdmDataProcessor(AbstractCdmDataProcessor):
                      "num_of_concepts",
                      "num_of_visits"]
         if self._settings.label_sub_folder is not None:
+            aggregate_list.append(("label", "any"))
             name_list.append("label")
         sequence_data = union_tokens.group_by("observation_period_id"). \
             aggregate(aggregate_list). \
