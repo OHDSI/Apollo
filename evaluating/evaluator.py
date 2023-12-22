@@ -131,6 +131,6 @@ def main(args: List[str]):
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
-        raise Exception("Must provide path to ini file as argument")
+        raise Exception("Must provide path to yaml file as argument")
     else:
         main(sys.argv[1:])

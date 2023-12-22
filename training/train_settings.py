@@ -37,12 +37,12 @@ class ModelTrainingSettings:
     # system
     sequence_data_folder: str
     output_folder: str
-    pretrained_model_folder: Optional[str]
     batch_size: int
     checkpoint_every: Optional[int]
     training_settings: TrainingSettings
     learning_objective_settings: LearningObjectiveSettings
     model_settings: ModelSettings
+    pretrained_model_folder: Optional[str] = None
     pretrained_epoch: Optional[int] = None
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
