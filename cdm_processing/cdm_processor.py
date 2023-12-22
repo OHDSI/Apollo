@@ -179,7 +179,8 @@ class CdmDataProcessor(AbstractCdmDataProcessor):
         sql = "SELECT tokens.*, " \
               f"{part1}" \
               "  ROW_NUMBER() OVER " \
-              "    (PARTITION BY observation_period_id ORDER BY visit_concept_orders, sort_order) - 1  AS orders " \
+              "    (PARTITION BY tokens.observation_period_id ORDER BY visit_concept_orders, sort_order) - 1 " \
+              "    AS orders " \
               "FROM (" \
               "  SELECT * FROM interval_tokens " \
               "  UNION ALL " \
@@ -190,7 +191,7 @@ class CdmDataProcessor(AbstractCdmDataProcessor):
               "  SELECT * FROM end_tokens" \
               ") tokens " \
               f"{part2}" \
-              "ORDER BY observation_period_id, visit_concept_orders, sort_order"
+              "ORDER BY tokens.observation_period_id, visit_concept_orders, sort_order"
         union_tokens = con.execute(sql).arrow()
         con.execute("DROP TABLE visits")
         con.execute("DROP TABLE interval_tokens")
