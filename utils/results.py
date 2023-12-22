@@ -17,7 +17,7 @@ class Results:
             writer = csv.writer(f)
             writer.writerow(self._fields)
             if isinstance(self._values[0], list):
-                for row in self._values:
-                    writer.writerow(row)
+                for i in range(len(self._values[0])):
+                    writer.writerow([row[i] for row in self._values])
             else:
                 writer.writerow(self._values)

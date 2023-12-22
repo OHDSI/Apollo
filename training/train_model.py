@@ -340,11 +340,15 @@ def main(args: List[str]):
         config = yaml.safe_load(file)
     model_training_settings = ModelTrainingSettings(config)
     model_trainer = ModelTrainer(settings=model_training_settings)
-    model_trainer.train_model()
+    if model_training_settings.learning_objective_settings.new_label_prediction and len(args) > 1:
+        result_file = args[1]
+        model_trainer.predict(result_file=result_file)
+    else:
+        model_trainer.train_model()
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
+    if len(sys.argv) < 2:
         raise Exception("Must provide path to yaml file as argument")
     else:
         main(sys.argv[1:])

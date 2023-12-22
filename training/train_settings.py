@@ -54,6 +54,7 @@ class ModelTrainingSettings:
         self.learning_objective_settings = LearningObjectiveSettings(**config["learning_objectives"])
         self.training_settings = TrainingSettings(**config["training"])
         self.model_settings = ModelSettings(**config["model"])
+        self.__post_init__()
 
     def __post_init__(self):
         if self.learning_objective_settings.masked_concept_learning and not self.model_settings.concept_embedding:
@@ -76,6 +77,8 @@ class ModelTrainingSettings:
                     self.learning_objective_settings.masked_visit_concept_learning or
                     self.learning_objective_settings.next_visit_concepts_prediction):
                 raise ValueError("Cannot combine next token prediction with any of the other learning objectives.")
+        if self.learning_objective_settings.new_label_prediction and self.training_settings.train_fraction != 0:
+            raise ValueError("Cannot use new_label_prediction with train_fraction != 0")
 
     def write_model_settings(self, filename: str) -> None:
         with open(filename, "w") as config_file:

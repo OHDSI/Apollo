@@ -58,6 +58,7 @@ class SimulationSettings:
         settings = config["debug"]
         for key, value in settings.items():
             setattr(self, key, value)
+        self.__post_init__()
 
     def __post_init__(self):
         if self.log_verbosity not in [0, 1, 2]:

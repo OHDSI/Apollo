@@ -485,8 +485,7 @@ class NewLabelPredictionLearningObjective:
         self._predictions = BinaryPrediction()
 
     @staticmethod
-    def process_row(self,
-                    row: Dict,
+    def process_row(row: Dict,
                     start_index: int,
                     end_index: int,
                     max_sequence_length: int) -> Dict[str, Union[NDArray, float]]:
@@ -498,13 +497,17 @@ class NewLabelPredictionLearningObjective:
         }
         return model_inputs
 
-    @staticmethod
-    def compute_loss(outputs: Dict[str, torch.Tensor], predictions: Dict[str, torch.Tensor]) -> torch.Tensor:
+    def compute_loss(self, outputs: Dict[str, torch.Tensor], predictions: Dict[str, torch.Tensor]) -> torch.Tensor:
+        self._predictions.add(person_ids=outputs[ModelInputNames.PERSON_ID].detach().cpu().tolist(),
+                              observation_period_ids=outputs[ModelInputNames.OBSERVATION_PERIOD_ID].detach().cpu().
+                              tolist(),
+                              predictions=predictions[ModelOutputNames.LABEL_PREDICTIONS].detach().cpu().squeeze(1).
+                              tolist())
         return torch.tensor(0.0)
 
     def reset_performance_metrics(self) -> None:
         self._predictions.reset()
 
     def report_performance_metrics(self, train: bool, writer: [SummaryWriter, Results], epoch: int) -> None:
-        self._predictions.report_metrics(train, writer)
+        self._predictions.report_metrics(writer)
 
