@@ -8,6 +8,7 @@ import pyarrow as pa
 from torch.utils.data import DataLoader
 
 from data_loading import tokenizer, learning_objectives, parquet_data_iterator, dataset, data_transformer
+from data_loading.data_transformer import ApolloDataTransformer
 from data_loading.model_inputs import InputTransformer
 from model.model_settings import ModelSettings
 
@@ -118,3 +119,28 @@ class TestDataGenerating(unittest.TestCase):
             batch_count += 1
             break
         assert batch_count == 1
+
+    def test_create_begin_end_indices(self):
+        ds = dataset.ApolloDataset(folder=self.parquet_folder, train_test_split=1, is_train=True)
+        concept_tokenizer = tokenizer.ConceptTokenizer()
+        concept_tokenizer.fit_on_concept_sequences(ds, "concept_ids")
+        visit_concept_tokenizer = tokenizer.ConceptTokenizer()
+        visit_concept_tokenizer.fit_on_concept_sequences(ds, "visit_concept_ids")
+        row = {
+            "visit_concept_orders": np.array([1, 1, 1, 1, 2, 2, 2, 2], dtype=np.int32),
+            "num_of_concepts": 8
+        }
+
+        transformer = ApolloDataTransformer(
+            learning_objectives=[learning_objectives.NextVisitConceptsLearningObjective(concept_tokenizer)],
+            input_transformer=None,
+            max_sequence_length=3 + 1,
+            truncate_type="random")
+        begin_index, end_index = transformer._create_begin_end_indices(row)
+        assert begin_index <= 1
+        assert begin_index <= end_index <= 3
+
+        transformer._truncate_type = "tail"
+        begin_index, end_index = transformer._create_begin_end_indices(row)
+        assert begin_index == 1
+        assert end_index == 3

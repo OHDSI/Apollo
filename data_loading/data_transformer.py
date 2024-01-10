@@ -75,11 +75,16 @@ class ApolloDataTransformer:
         new_max_length = self._max_sequence_length - 1  # Subtract one for the [CLS] token
         if self._keep_next_visit:
             last_visit = row[DataNames.VISIT_CONCEPT_ORDERS][-1]
-            end_index = find_last_index(row[DataNames.VISIT_CONCEPT_ORDERS], last_visit - 1)
-            if end_index == -1:
+            max_index = find_last_index(row[DataNames.VISIT_CONCEPT_ORDERS], last_visit - 1)
+            if max_index == -1:
                 return 0, 0
-            start_index = max(0, end_index - new_max_length)
-            return start_index, end_index
+            if max_index + 1 > new_max_length and self._truncate_type == "random":
+                start_index = random.randint(0, max_index + 1 - new_max_length)
+                end_index = min(max_index, start_index + new_max_length)
+                return start_index, end_index
+            else:
+                start_index = max(0, max_index + 1 - new_max_length)
+                return start_index, max_index
         else:
             next_token_offset = 1 if self._keep_next_token else 0
             if seq_length > new_max_length and self._truncate_type == "random":

@@ -7,7 +7,7 @@ Assessment of Pre-trained Observational Large Longitudinal models in OHDSI (APOL
 This Python package is for building and evaluating large general pre-trained models on data in the OMOP Common Data Model (CDM) format. The models are fitted on the structured data (concepts) in the CDM, not any natural language. We aim to evaluate these models on various tasks, such as patient-level prediction (either zero-shot or fine-tuned).
 
 # Overview
-This package assumes the [GeneralPretrainedModelTools](https://github.com/OHDSI/GeneralPretrainedModelTools) R package has been executed to retrieve (a sample of) the CDM data to local Parquet files. After this, a 'cdm_processor' must be run to convert the data to sequence data suitable for a large language model. TODO: how to go from here. 
+This package assumes the [AppoloR](https://github.com/OHDSI/ApolloR) R package has been executed to retrieve (a sample of) the CDM data to local Parquet files. After this, a 'cdm_processor' must be run to convert the data to sequence data suitable for a large language model. TODO: how to go from here. 
 
 ## Getting Started
 
@@ -27,7 +27,7 @@ pip install -r requirements.txt
 
 ### Simulate CDM data
 
-In real-world applications, the CDM data can be retrieved from a database using the [GeneralPretrainedModelTools R package](https://github.com/OHDSI/GeneralPretrainedModelTools). 
+In real-world applications, the CDM data can be retrieved from a database using the [AppoloR](https://github.com/OHDSI/ApolloR) package. 
 For testing purposes, we can simulate CDM data using a built-in simulator:
 
 1. Edit simulator.ini so the `root_folder` argument points to a folder on the local file system.
