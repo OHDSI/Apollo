@@ -59,7 +59,7 @@ class ApolloDataset(data.IterableDataset):
             per_worker = int(math.ceil(len(self._files) / float(worker_info.num_workers)))
             worker_id = worker_info.id
             iter_start = worker_id * per_worker
-            iter_end = min(iter_start + per_worker, len(self._files) - 1)
+            iter_end = min(iter_start + per_worker, len(self._files))
             return ParquetDataIterator(self._files[iter_start:iter_end], self._data_transformer)
 
 
