@@ -70,11 +70,7 @@ class TransformerModel(nn.Module):
                                                  batch_first=True)
         self.transformer_encoder = TransformerEncoder(encoder_layer=encoder_layers,
                                                       num_layers=model_settings.num_hidden_layers)
-        # Seems necessary per https://github.com/pytorch/pytorch/issues/72253
-        for name, param in self.transformer_encoder.named_parameters():
-            if 'weight' in name and param.data.dim() == 2:
-                nn.init.kaiming_uniform_(param)
-
+ 
         # Decoders:
         if learning_objective_settings.masked_concept_learning:
             self.masked_token_decoder = nn.Linear(in_features=model_settings.hidden_size,
