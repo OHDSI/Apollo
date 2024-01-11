@@ -24,5 +24,5 @@ class EvaluationSettings:
         system = config["system"]
         for key, value in system.items():
             setattr(self, key, value)
-        self.learning_objective_settings = LearningObjectiveSettings(**config["learning objectives"])
+        self.learning_objective_settings = LearningObjectiveSettings(**config["learning_objectives"])
         self.training_settings = TrainingSettings(**config["training"])

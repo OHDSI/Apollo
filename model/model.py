@@ -70,7 +70,7 @@ class TransformerModel(nn.Module):
                                                  batch_first=True)
         self.transformer_encoder = TransformerEncoder(encoder_layer=encoder_layers,
                                                       num_layers=model_settings.num_hidden_layers)
- 
+
         # Decoders:
         if learning_objective_settings.masked_concept_learning:
             self.masked_token_decoder = nn.Linear(in_features=model_settings.hidden_size,
