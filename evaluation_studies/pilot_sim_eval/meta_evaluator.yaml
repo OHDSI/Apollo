@@ -57,7 +57,6 @@ pretrained models:
     train_fraction: 0.8
     num_epochs: 100
     learning_rate: 0.001
-    weight_decay: 0.01
   model:
     max_sequence_length: 256
     concept_embedding: yes
@@ -85,7 +84,6 @@ pretrained models:
     train_fraction: 0.8
     num_epochs: 100
     learning_rate: 0.001
-    weight_decay: 0.01
   model:
     max_sequence_length: 256
     concept_embedding: yes
@@ -113,7 +111,6 @@ pretrained models:
     train_fraction: 0.8
     num_epochs: 100
     learning_rate: 0.001
-    weight_decay: 0.01
   model:
     max_sequence_length: 256
     concept_embedding: yes
@@ -141,7 +138,6 @@ pretrained models:
     train_fraction: 0.8
     num_epochs: 100
     learning_rate: 0.001
-    weight_decay: 0.01
   model:
     max_sequence_length: 256
     concept_embedding: yes
@@ -169,7 +165,6 @@ pretrained models:
     train_fraction: 0.8
     num_epochs: 100
     learning_rate: 0.001
-    weight_decay: 0.01
   model:
     max_sequence_length: 256
     concept_embedding: yes
@@ -197,7 +192,6 @@ pretrained models:
     train_fraction: 0.8
     num_epochs: 100
     learning_rate: 0.001
-    weight_decay: 0.01
   model:
     max_sequence_length: 256
     concept_embedding: yes
@@ -225,7 +219,6 @@ pretrained models:
     train_fraction: 0.8
     num_epochs: 100
     learning_rate: 0.001
-    weight_decay: 0.01
   model:
     max_sequence_length: 256
     concept_embedding: yes
@@ -253,7 +246,6 @@ pretrained models:
     train_fraction: 0.8
     num_epochs: 100
     learning_rate: 0.001
-    weight_decay: 0.01
   model:
     max_sequence_length: 256
     concept_embedding: yes
@@ -279,7 +271,6 @@ pretrained models:
     train_fraction: 0.8
     num_epochs: 100
     learning_rate: 0.001
-    weight_decay: 0.01
   model:
     max_sequence_length: 256
     concept_embedding: yes
@@ -305,7 +296,6 @@ pretrained models:
     train_fraction: 0.8
     num_epochs: 100
     learning_rate: 0.001
-    weight_decay: 0.01
   model:
     max_sequence_length: 256
     concept_embedding: yes
@@ -359,7 +349,19 @@ fine-tuned models:
     num_epochs: 100
     num_freeze_epochs: 0
     learning_rate: 0.001
-    weight_decay: 0.01
+
+- name: all_freeze
+  pretrained models:
+  - name: reference
+  learning_objectives:
+    label_prediction: yes
+    truncate_type: tail
+  training:
+    train_fraction: 1
+    num_epochs: 100
+    num_freeze_epochs: 100
+    learning_rate: 0.001
+    weight_decay: 0.001
     
 - name: simple_regression
   pretrained models:
@@ -372,4 +374,3 @@ fine-tuned models:
     train_fraction: 1
     num_epochs: 100
     learning_rate: 0.001
-    weight_decay: 0.01

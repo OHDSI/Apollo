@@ -55,7 +55,7 @@ training:
   learning_rate: 0.001
 
   # Weight decay for the Adam optimizer:
-  weight_decay: 0.01
+  weight_decay: 0.0
 
   # If specified, the maximum number of batches to use for training. Use to evaluate effect of having fewer data:
   max_batches:

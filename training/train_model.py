@@ -111,9 +111,19 @@ class ModelTrainer:
                                            tokenizer=self._concept_tokenizer,
                                            visit_tokenizer=self._visit_concept_tokenizer)
         self._model.to(self._device)
-        self._optimizer = optim.Adam(params=self._model.parameters(),
-                                     lr=settings.training_settings.learning_rate,
-                                     weight_decay=settings.training_settings.weight_decay)
+        if settings.training_settings.weight_decay == 0:
+            self._optimizer = optim.Adam(params=self._model.parameters(),
+                                         lr=settings.training_settings.learning_rate)
+        else:
+            no_decay = ['bias', 'LayerNorm.weight']
+            optimizer_grouped_parameters = [
+                {'params': [p for n, p in self._model.named_parameters() if not any(nd in n for nd in no_decay)],
+                 'weight_decay': settings.training_settings.weight_decay},
+                {'params': [p for n, p in self._model.named_parameters() if any(nd in n for nd in no_decay)],
+                 'weight_decay': 0.0}
+            ]
+            self._optimizer = optim.AdamW(params=optimizer_grouped_parameters,
+                                          lr=settings.training_settings.learning_rate)
         self._epoch = 0
 
     def _configure_logger(self) -> None:

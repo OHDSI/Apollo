@@ -27,7 +27,7 @@ class TrainingSettings:
     train_fraction: float
     num_epochs: int
     learning_rate: float
-    weight_decay: float
+    weight_decay: float = 0.0
     num_freeze_epochs: int = 0
     max_batches: Optional[int] = None
 
