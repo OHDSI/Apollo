@@ -4,6 +4,7 @@ from typing import Dict
 import torch
 from torch import nn, Tensor
 from torch.nn import TransformerEncoder, TransformerEncoderLayer
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
 from data_loading.tokenizer import ConceptTokenizer
 from data_loading.variable_names import ModelInputNames, ModelOutputNames
@@ -100,6 +101,16 @@ class TransformerModel(nn.Module):
                                            out_features=1)
             self.label_decoder.bias.data.zero_()
             nn.init.xavier_uniform_(self.label_decoder.weight)
+        if learning_objective_settings.lstm_label_prediction:
+            self.lstm_label_decoder = nn.LSTM(input_size=model_settings.hidden_size,
+                                              hidden_size=128,
+                                              num_layers=1,
+                                              batch_first=True,
+                                              bidirectional=True)
+            self.lstm_label_decoder_linear = nn.Linear(in_features=128 * 2,
+                                                       out_features=1)
+            self.lstm_label_decoder_linear.bias.data.zero_()
+            nn.init.xavier_uniform_(self.lstm_label_decoder_linear.weight)
 
     def forward(
             self,
@@ -168,12 +179,23 @@ class TransformerModel(nn.Module):
             predictions[ModelOutputNames.NEXT_VISIT_TOKENS_PREDICTION] = self.next_visit_tokens_decoder(encoded[:, 0, :])
         if self.learning_objective_settings.label_prediction or self.learning_objective_settings.new_label_prediction:
             predictions[ModelOutputNames.LABEL_PREDICTIONS] = torch.sigmoid(self.label_decoder(encoded[:, 0, :]))
+        if self.learning_objective_settings.lstm_label_prediction:
+            predictions[ModelOutputNames.LABEL_PREDICTIONS] = self._lstm_label_prediction(encoded, inputs)
         return predictions
+
+    def _lstm_label_prediction(self, encoded: Tensor, inputs: Dict[str, Tensor]) -> Tensor:
+        seq_lengths = torch.sum(inputs[ModelInputNames.PADDING_MASK] == 0, dim=1)
+        packed_input = pack_padded_sequence(encoded, seq_lengths.cpu(), batch_first=True, enforce_sorted=False)
+        packed_output, _ = self.lstm_label_decoder(packed_input)
+        lstm_output, _ = pad_packed_sequence(packed_output, batch_first=True)
+        last_non_padded_idx = seq_lengths.view(-1, 1).expand(len(seq_lengths), lstm_output.size(2)).unsqueeze(1) - 1
+        lstm_output = lstm_output.gather(1, last_non_padded_idx).squeeze(1)
+        return torch.sigmoid(self.lstm_label_decoder_linear(lstm_output))
 
     def freeze_non_head(self):
         """Freeze all parameters except the head layers."""
         for name, param in self.named_parameters():
-            if 'masked_token_decoder' in name or 'masked_visit_token_decoder' in name or 'label_decoder' in name:
+            if "decoder" in name:
                 continue
             param.requires_grad = False
         self._frozen = True

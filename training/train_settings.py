@@ -10,6 +10,7 @@ class LearningObjectiveSettings:
     truncate_type: str
     label_prediction: bool = False
     new_label_prediction: bool = False
+    lstm_label_prediction: bool = False
     masked_concept_learning: bool = False
     mask_one_concept_per_visit: bool = True
     masked_visit_concept_learning: bool = False
@@ -73,6 +74,8 @@ class ModelTrainingSettings:
                                  "for the simple regression model.")
         if self.learning_objective_settings.next_token_prediction:
             if (self.learning_objective_settings.label_prediction or
+                    self.learning_objective_settings.new_label_prediction or
+                    self.learning_objective_settings.lstm_label_prediction or
                     self.learning_objective_settings.masked_concept_learning or
                     self.learning_objective_settings.masked_visit_concept_learning or
                     self.learning_objective_settings.next_visit_concepts_prediction):

@@ -37,6 +37,9 @@ learning_objectives:
   # Predict a given label for each person:
   label_prediction: no
 
+  # Predict a given label for each person using LSTM on top of the transformer model:
+  lstm_label_prediction: no
+
   # Use a simple regression model instead of a transformer model: (default: no)
   simple_regression_model: no
 

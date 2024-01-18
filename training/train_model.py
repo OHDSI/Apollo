@@ -156,7 +156,8 @@ class ModelTrainer:
         if self._settings.learning_objective_settings.masked_visit_concept_learning:
             learning_objective_list.append(learning_objectives.MaskedVisitConceptLearningObjective(
                 visit_concept_tokenizer=self._visit_concept_tokenizer))
-        if self._settings.learning_objective_settings.label_prediction:
+        if (self._settings.learning_objective_settings.label_prediction or
+                self._settings.learning_objective_settings.lstm_label_prediction):
             learning_objective_list.append(learning_objectives.LabelPredictionLearningObjective())
         if self._settings.learning_objective_settings.next_token_prediction:
             learning_objective_list.append(learning_objectives.NextTokenLearningObjective(
