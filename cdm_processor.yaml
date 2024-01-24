@@ -20,7 +20,16 @@ mapping:
   concepts_to_remove:
   - 0
   - 900000010
-
+  - 262
+  - 5083
+  - 9201
+  - 9202
+  - 9203
+  - 32036
+  - 581458
+  - 581476
+  - 581478
+  - 42898160
 
 debug:
   # For debugging only: process a small part of the data, and profile performance:

@@ -8,8 +8,8 @@ from model.model_settings import ModelSettings
 @dataclass
 class LearningObjectiveSettings:
     truncate_type: str
+    predict_new: bool = False
     label_prediction: bool = False
-    new_label_prediction: bool = False
     lstm_label_prediction: bool = False
     masked_concept_learning: bool = False
     mask_one_concept_per_visit: bool = True
@@ -45,6 +45,7 @@ class ModelTrainingSettings:
     model_settings: ModelSettings
     pretrained_model_folder: Optional[str] = None
     pretrained_epoch: Optional[int] = None
+    prediction_output_file: Optional[str] = None
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         if config is None:
@@ -74,14 +75,19 @@ class ModelTrainingSettings:
                                  "for the simple regression model.")
         if self.learning_objective_settings.next_token_prediction:
             if (self.learning_objective_settings.label_prediction or
-                    self.learning_objective_settings.new_label_prediction or
                     self.learning_objective_settings.lstm_label_prediction or
                     self.learning_objective_settings.masked_concept_learning or
                     self.learning_objective_settings.masked_visit_concept_learning or
                     self.learning_objective_settings.next_visit_concepts_prediction):
                 raise ValueError("Cannot combine next token prediction with any of the other learning objectives.")
-        if self.learning_objective_settings.new_label_prediction and self.training_settings.train_fraction != 0:
-            raise ValueError("Cannot use new_label_prediction with train_fraction != 0")
+        if self.learning_objective_settings.predict_new:
+            if self.training_settings.train_fraction != 0:
+                raise ValueError("Cannot predict new things with train_fraction != 0")
+            if (not self.learning_objective_settings.label_prediction and
+               not self.learning_objective_settings.lstm_label_prediction):
+                raise ValueError("predict_new currently only works with label_prediction or lstm_label_prediction")
+            if self.prediction_output_file is None:
+                raise ValueError("Must specify prediction_output_file when predict_new is true")
 
     def write_model_settings(self, filename: str) -> None:
         with open(filename, "w") as config_file:

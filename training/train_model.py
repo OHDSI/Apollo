@@ -158,15 +158,16 @@ class ModelTrainer:
                 visit_concept_tokenizer=self._visit_concept_tokenizer))
         if (self._settings.learning_objective_settings.label_prediction or
                 self._settings.learning_objective_settings.lstm_label_prediction):
-            learning_objective_list.append(learning_objectives.LabelPredictionLearningObjective())
+            if self._settings.learning_objective_settings.predict_new:
+                learning_objective_list.append(learning_objectives.NewLabelPredictionLearningObjective())
+            else:
+                learning_objective_list.append(learning_objectives.LabelPredictionLearningObjective())
         if self._settings.learning_objective_settings.next_token_prediction:
             learning_objective_list.append(learning_objectives.NextTokenLearningObjective(
                 concept_tokenizer=self._concept_tokenizer))
         if self._settings.learning_objective_settings.next_visit_concepts_prediction:
             learning_objective_list.append(learning_objectives.NextVisitConceptsLearningObjective(
                 concept_tokenizer=self._concept_tokenizer))
-        if self._settings.learning_objective_settings.new_label_prediction:
-            learning_objective_list.append(learning_objectives.NewLabelPredictionLearningObjective())
         return learning_objective_list
 
     def _get_data_sets(self) -> Tuple[Optional[ApolloDataset], Optional[ApolloDataset]]:
@@ -305,8 +306,8 @@ class ModelTrainer:
             learning_objective.report_performance_metrics(train=False, writer=result, epoch=self._epoch)
         result.write_to_csv(result_file)
 
-    def predict(self, result_file: str, epoch: Optional[int] = None) -> None:
-        self.evaluate_model(result_file=result_file, epoch=epoch)
+    def predict(self) -> None:
+        self.evaluate_model(result_file=self._settings.prediction_output_file)
 
     def _save_checkpoint(self):
         file_name = os.path.join(self._settings.output_folder, _get_file_name(self._epoch))
@@ -351,9 +352,8 @@ def main(args: List[str]):
         config = yaml.safe_load(file)
     model_training_settings = ModelTrainingSettings(config)
     model_trainer = ModelTrainer(settings=model_training_settings)
-    if model_training_settings.learning_objective_settings.new_label_prediction and len(args) > 1:
-        result_file = args[1]
-        model_trainer.predict(result_file=result_file)
+    if model_training_settings.learning_objective_settings.predict_new:
+        model_trainer.predict()
     else:
         model_trainer.train_model()
 

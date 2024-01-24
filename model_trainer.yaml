@@ -19,6 +19,10 @@ system:
 
 
 learning_objectives:
+
+  # Predict new things (see other learning objectives), or train to predict:
+  predict_new: no
+
   # Predict a random subset of the input concepts that are masked out:
   masked_concept_learning: yes
 
@@ -30,9 +34,6 @@ learning_objectives:
 
   # If the input sequence is longer than max_sequence_length, truncate the sequence "random" or keep the "tail":
   truncate_type: random
-
-  # Predict the next token in the sequence:
-  next_token_prediction: no
 
   # Predict a given label for each person:
   label_prediction: no
