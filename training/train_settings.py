@@ -32,6 +32,12 @@ class TrainingSettings:
     num_freeze_epochs: int = 0
     max_batches: Optional[int] = None
 
+    def __post_init__(self):
+        # needed if these fields are provided in scientific notation
+        if not isinstance(self.learning_rate, float):
+            self.learning_rate = float(self.learning_rate)
+        if not isinstance(self.weight_decay, float):
+            self.weight_decay = float(self.weight_decay)
 
 @dataclass
 class ModelTrainingSettings:

@@ -17,6 +17,7 @@ import torch
 from torch import optim
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
 
 import utils.logger as logger
 from data_loading.model_inputs import InputTransformer
@@ -178,14 +179,18 @@ class ModelTrainer:
                                                  input_transformer=input_transformer,
                                                  max_sequence_length=self._settings.model_settings.max_sequence_length,
                                                  truncate_type=self._settings.learning_objective_settings.truncate_type)
-        if self._settings.training_settings.train_fraction < 1.0:
+        if ((isinstance(self._settings.training_settings.train_fraction, float) and
+             self._settings.training_settings.train_fraction < 1.0)
+                or self._settings.training_settings.train_fraction == "plp"):
             test_data = ApolloDataset(folder=self._settings.sequence_data_folder,
                                       data_transformer=data_transformer,
                                       train_test_split=self._settings.training_settings.train_fraction,
                                       is_train=False)
         else:
             test_data = None
-        if self._settings.training_settings.train_fraction > 0.0:
+        if ((isinstance(self._settings.training_settings.train_fraction, float) and
+             self._settings.training_settings.train_fraction > 0.0)
+                or self._settings.training_settings.train_fraction == "plp"):
             train_data = ApolloDataset(folder=self._settings.sequence_data_folder,
                                        data_transformer=data_transformer,
                                        train_test_split=self._settings.training_settings.train_fraction,
@@ -215,7 +220,7 @@ class ModelTrainer:
                                  batch_size=self._settings.batch_size,
                                  num_workers=4,
                                  pin_memory=True)
-        for inputs in data_loader:
+        for inputs in tqdm(data_loader):
             if (self._settings.training_settings.max_batches is not None and
                     batch_count >= self._settings.training_settings.max_batches):
                 logging.info("Reached maximum number of batches specified by user, stopping")
