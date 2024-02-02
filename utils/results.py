@@ -1,5 +1,6 @@
 import csv
-from typing import List
+import json
+from typing import List, Optional
 
 
 class Results:
@@ -21,3 +22,21 @@ class Results:
                     writer.writerow([row[i] for row in self._values])
             else:
                 writer.writerow(self._values)
+
+
+class JsonWriter:
+    def __init__(self, file_name: Optional[str] = None):
+        self._file_name = file_name
+        self.previous = 0
+        self.metrics = {}
+
+    def add_metrics(self, epochs: int, metrics: dict):
+        if epochs == self.previous:
+            # update self.metrics dict
+            self.metrics["metrics"].update(metrics)
+            with open(self._file_name, "a", encoding="UTF8", newline="") as f:
+                f.write(json.dumps(self.metrics) + "\n")
+        else:
+            self.metrics = {"epochs": epochs, "metrics": metrics}
+            self.previous = epochs
+

@@ -12,7 +12,7 @@ import sklearn.metrics as metrics
 from data_loading.model_inputs import ModelInput, prefix_and_pad, find_last_index
 from data_loading.tokenizer import ConceptTokenizer
 from data_loading.variable_names import ModelInputNames, DataNames, ModelOutputNames
-from utils.results import Results
+from utils.results import Results, JsonWriter
 
 IGNORE_INDEX = -1
 
@@ -125,6 +125,13 @@ class BinaryPredictionPerformance:
             writer.put_value(f"{label} AUC", self.get_auc())
             writer.put_value(f"{label} AUPRC", self.get_auprc())
             writer.put_value(f"{label} Brier score", self.get_brier_score())
+        if isinstance(writer, JsonWriter):
+            writer.add_metrics(epochs=epoch, metrics={"train" if train else "validation": {"loss": self.get_mean_loss(),
+                                                                                       "AUC": self.get_auc(),
+                                                                                       "AUPRC": self.get_auprc(),
+                                                                                       "Brier": self.get_brier_score()}}
+                                  )
+
 
 class BinaryPrediction:
 
@@ -133,7 +140,7 @@ class BinaryPrediction:
         self.observation_period_ids: list = []
         self.predictions: list = []
 
-    def add(self, person_ids: List[int], observation_period_ids: List[int],  predictions: List[float]) -> None:
+    def add(self, person_ids: List[int], observation_period_ids: List[int], predictions: List[float]) -> None:
         self.person_ids.extend(person_ids)
         self.observation_period_ids.extend(observation_period_ids)
         self.predictions.extend(predictions)
@@ -510,4 +517,3 @@ class NewLabelPredictionLearningObjective:
 
     def report_performance_metrics(self, train: bool, writer: [SummaryWriter, Results], epoch: int) -> None:
         self._predictions.report_metrics(writer)
-

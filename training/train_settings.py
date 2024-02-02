@@ -1,8 +1,13 @@
+import os
+
 import yaml
 from dataclasses import dataclass, asdict
 from typing import Optional, Dict, Any
 
+from torch.utils.tensorboard import SummaryWriter
+
 from model.model_settings import ModelSettings
+from utils.results import Results, JsonWriter
 
 
 @dataclass
@@ -52,17 +57,30 @@ class ModelTrainingSettings:
     pretrained_model_folder: Optional[str] = None
     pretrained_epoch: Optional[int] = None
     prediction_output_file: Optional[str] = None
+    writer: [SummaryWriter, Results, JsonWriter, None] = None
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         if config is None:
             return
         system = config["system"]
         for key, value in system.items():
+            if key == "writer":
+                value = self.getwriter(value)
             setattr(self, key, value)
         self.learning_objective_settings = LearningObjectiveSettings(**config["learning_objectives"])
         self.training_settings = TrainingSettings(**config["training"])
         self.model_settings = ModelSettings(**config["model"])
         self.__post_init__()
+
+    def getwriter(self, value):
+        if value == "tensorboard":
+            return SummaryWriter()
+        elif value == "results":
+            return Results()
+        elif value == "json":
+            return JsonWriter(os.path.join(self.output_folder, "metrics.json"))
+        else:
+            raise ValueError(f"Invalid writer: {value}")
 
     def __post_init__(self):
         if self.learning_objective_settings.masked_concept_learning and not self.model_settings.concept_embedding:

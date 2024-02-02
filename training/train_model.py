@@ -29,7 +29,7 @@ import data_loading.learning_objectives as learning_objectives
 import data_loading.tokenizer as tokenizer
 from data_loading.variable_names import DataNames
 from model.model import TransformerModel
-from utils.results import Results
+from utils.results import Results, JsonWriter
 
 LOGGER_FILE_NAME = "_model_training_log.txt"
 BATCH_REPORT_INTERVAL = 1000
@@ -82,7 +82,7 @@ class ModelTrainer:
         os.makedirs(settings.output_folder, exist_ok=True)
         self._configure_logger()
         logger.log_settings(settings)
-        self._writer: Optional[SummaryWriter] = None
+        self._writer: Optional[SummaryWriter] = settings.writer
 
         # Get concept tokenizers:
         self._concept_tokenizer = self._get_concept_tokenizer(file_name=CONCEPT_TOKENIZER_FILE_NAME,
@@ -259,7 +259,7 @@ class ModelTrainer:
 
         for learning_objective in self._learning_objectives:
             learning_objective.report_performance_metrics(train, self._writer, self._epoch)
-        if self._writer is not None:
+        if isinstance(self._writer, SummaryWriter):
             self._writer.flush()
 
     def train_model(self) -> None:
@@ -278,10 +278,9 @@ class ModelTrainer:
 
         logging.info("Performing computations on device: %s", self._device.type)
         logging.info("Total parameters: {:,} ".format(sum([param.nelement() for param in self._model.parameters()])))
-        self._writer = SummaryWriter(self._settings.output_folder)
         self._load_checkpoint()
         start = self._epoch + 1
-        if (self._settings.training_settings.num_freeze_epochs >= self._epoch and
+        if (self._settings.training_settings.num_freeze_epochs >= start and
                 self._settings.pretrained_model_folder is not None):
             logging.info("Freezing pre-trained model weights")
             self._model.freeze_non_head()
