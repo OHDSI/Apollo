@@ -3,7 +3,7 @@ system:
   sequence_data_folder: /home/egill/github/ApolloR/plpResults/1/personSequence
 
   # Path where the model files will be written:
-  output_folder: /tmp/RtmpBgAMpO/file48a210e6c93b
+  output_folder: /tmp/RtmpoXspCy/filebba239f1cbe2
 
   # Path to a pre-trained model files to load. If empty, a new model will be created:
   pretrained_model_folder: /home/egill/projects/preTrainingEHR/model
@@ -52,7 +52,7 @@ training:
   train_fraction: plp
 
   # Number of epochs to train for:
-  num_epochs: 2
+  num_epochs: 5
 
   # Number of epochs to freeze the pre-trained model for (if pretrained_model_folder is not empty):
   num_freeze_epochs: 0

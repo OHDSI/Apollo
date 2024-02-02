@@ -28,15 +28,21 @@ class JsonWriter:
     def __init__(self, file_name: Optional[str] = None):
         self._file_name = file_name
         self.previous = 0
-        self.metrics = {}
+        self.metrics_list = []
 
     def add_metrics(self, epochs: int, metrics: dict):
-        if epochs == self.previous:
-            # update self.metrics dict
-            self.metrics["metrics"].update(metrics)
-            with open(self._file_name, "a", encoding="UTF8", newline="") as f:
-                f.write(json.dumps(self.metrics) + "\n")
+        if self.metrics_list:
+            for metric in self.metrics_list:
+                if metric["epochs"] == epochs:
+                    metric["metrics"].update(metrics)
+                    return
+            self.metrics_list.append({"epochs": epochs, "metrics": metrics})
         else:
-            self.metrics = {"epochs": epochs, "metrics": metrics}
-            self.previous = epochs
+            self.metrics_list.append({"epochs": epochs, "metrics": metrics})
 
+    def flush(self):
+        if self._file_name:
+            with open(self._file_name, "a", encoding="UTF8", newline="") as f:
+                f.write(json.dumps(self.metrics_list, indent=4))
+        else:
+            raise ValueError("No file name specified for json writer")

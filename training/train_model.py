@@ -297,6 +297,8 @@ class ModelTrainer:
             if self._model.is_frozen() and self._epoch >= self._settings.training_settings.num_freeze_epochs:
                 logging.info("Unfreezing pre-trained model weights")
                 self._model.unfreeze_all()
+        if isinstance(self._writer, JsonWriter):
+            self._writer.flush()
 
     def evaluate_model(self, result_file: str, epoch: Optional[int] = None) -> None:
         if epoch is not None:
