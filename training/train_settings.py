@@ -56,6 +56,7 @@ class ModelTrainingSettings:
     model_settings: ModelSettings
     pretrained_model_folder: Optional[str] = None
     pretrained_epoch: Optional[int] = None
+    finetuned_epoch: Optional[int] = None
     prediction_output_file: Optional[str] = None
     writer: [SummaryWriter, Results, JsonWriter, None] = None
 

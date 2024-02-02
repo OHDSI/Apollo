@@ -304,6 +304,10 @@ class ModelTrainer:
         if epoch is not None:
             self._load_model(file_name=os.path.join(self._settings.output_folder, _get_file_name(epoch)),
                              pretrained=True)
+        if self._settings.finetuned_epoch is not None:
+            self._load_model(file_name=os.path.join(self._settings.output_folder,
+                                                    _get_file_name(self._settings.finetuned_epoch)),
+                             pretrained=False)
         else:
             self._load_checkpoint()
         self._run_model(train=False)
