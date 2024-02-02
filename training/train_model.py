@@ -179,7 +179,7 @@ class ModelTrainer:
                                                  input_transformer=input_transformer,
                                                  max_sequence_length=self._settings.model_settings.max_sequence_length,
                                                  truncate_type=self._settings.learning_objective_settings.truncate_type)
-        if ((isinstance(self._settings.training_settings.train_fraction, float) and
+        if ((isinstance(self._settings.training_settings.train_fraction, (float, int)) and
              self._settings.training_settings.train_fraction < 1.0)
                 or self._settings.training_settings.train_fraction == "plp"):
             test_data = ApolloDataset(folder=self._settings.sequence_data_folder,
@@ -188,7 +188,7 @@ class ModelTrainer:
                                       is_train=False)
         else:
             test_data = None
-        if ((isinstance(self._settings.training_settings.train_fraction, float) and
+        if ((isinstance(self._settings.training_settings.train_fraction, (float, int)) and
              self._settings.training_settings.train_fraction > 0.0)
                 or self._settings.training_settings.train_fraction == "plp"):
             train_data = ApolloDataset(folder=self._settings.sequence_data_folder,
@@ -326,7 +326,7 @@ class ModelTrainer:
     def _load_model(self, file_name: str, pretrained: bool = False) -> None:
         loaded = torch.load(file_name, map_location=self._device)
         self._model.load_state_dict(loaded["model_state_dict"], strict=not pretrained)
-        if not pretrained:
+        if not pretrained and not self._settings.learning_objective_settings.predict_new:
             self._optimizer.load_state_dict(loaded["optimizer_state_dict"])
             self._epoch = loaded["epoch"]
 
