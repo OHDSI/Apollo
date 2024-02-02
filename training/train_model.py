@@ -185,6 +185,7 @@ class ModelTrainer:
             test_data = ApolloDataset(folder=self._settings.sequence_data_folder,
                                       data_transformer=data_transformer,
                                       train_test_split=self._settings.training_settings.train_fraction,
+                                      output_folder=self._settings.output_folder,
                                       is_train=False)
         else:
             test_data = None
@@ -194,6 +195,7 @@ class ModelTrainer:
             train_data = ApolloDataset(folder=self._settings.sequence_data_folder,
                                        data_transformer=data_transformer,
                                        train_test_split=self._settings.training_settings.train_fraction,
+                                       output_folder=self._settings.output_folder,
                                        is_train=True)
         else:
             train_data = None

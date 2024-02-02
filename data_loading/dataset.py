@@ -29,6 +29,7 @@ class ApolloDataset(data.IterableDataset):
                  folder: str,
                  data_transformer: Optional[ApolloDataTransformer] = None,
                  train_test_split: float = 0.8,
+                 output_folder: Optional[str] = None,
                  is_train: bool = True):
         """
         Initialization
@@ -47,7 +48,7 @@ class ApolloDataset(data.IterableDataset):
         self._train_test_split = train_test_split
         self._is_train = is_train
         all_files = list_files_with_extension(folder, ".parquet")
-        if isinstance(train_test_split, float):
+        if isinstance(train_test_split, (float, int)):
             split_point = int(len(all_files) * train_test_split)
             if is_train:
                 self._files = all_files[:split_point]
@@ -55,8 +56,7 @@ class ApolloDataset(data.IterableDataset):
                 self._files = all_files[split_point:]
         else:
             if is_train:
-                temp_dir = tempfile.mkdtemp()
-                train_dir = os.path.join(temp_dir, "train")
+                train_dir = os.path.join(output_folder, "train")
                 if not os.path.exists(train_dir):
                     os.makedirs(train_dir)
                 out_files = []
@@ -69,8 +69,7 @@ class ApolloDataset(data.IterableDataset):
                     out_files.append(output_path)
                 self._files = out_files
             else:
-                temp_dir = tempfile.mkdtemp()
-                test_dir = os.path.join(temp_dir, "test")
+                test_dir = os.path.join(output_folder, "test")
                 if not os.path.exists(test_dir):
                     os.makedirs(test_dir)
                 out_files = []
