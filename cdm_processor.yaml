@@ -1,15 +1,16 @@
 system:
   # Path where data was stored using the GeneralPretrainedModelTools package:
-  cdm_data_path: /home/egill/projects/preTrainingEHR/data/synthetic_data
+  cdm_data_path: /home/egill/projects/preTrainingEHR/pred3/CdmCovsFolder/c_-1_cxrqvuzmnd/
+
   
   # If the data has labels, either a subfolder in cdm_data_path or a path to the labels file:
-  labels: /tmp/RtmpJhO9jN/file3ce0479192684/label
+  labels: true
   
   # Maximum number of CPU cores to use:
   max_cores: 1
   
   # Path where the person sequence data will be written:
-  output_path: /home/egill/projects/preTrainingEHR/data/person_sequence
+  output_path: /home/egill/projects/preTrainingEHR//pred3/CdmCovsFolder/c_-1_cxrqvuzmnd/person_sequence
 
 
 mapping:
