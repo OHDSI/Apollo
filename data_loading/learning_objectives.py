@@ -378,7 +378,7 @@ class LabelPredictionLearningObjective(LearningObjective):
         label_predictions = predictions[ModelOutputNames.LABEL_PREDICTIONS]
         labels = outputs[ModelInputNames.FINETUNE_LABEL]
 
-        loss = self._criterion(torch.squeeze(label_predictions), labels.float())
+        loss = self._criterion(torch.squeeze(label_predictions), labels.float().squeeze())
         self._performance.add(loss=loss.float().mean().item(),
                               prediction=label_predictions.detach().cpu().tolist(),
                               label=labels.detach().cpu().tolist())
