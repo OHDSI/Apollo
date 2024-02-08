@@ -267,7 +267,8 @@ class ModelTrainer:
             new_json_file = os.path.join(self._settings.output_folder, CONCEPT_TOKENIZER_FILE_NAME)
             self._concept_tokenizer.save_to_json(new_json_file)
             if (self._settings.learning_objective_settings.masked_visit_concept_learning or
-                    self._settings.learning_objective_settings.label_prediction):
+                    self._settings.learning_objective_settings.label_prediction or
+                    self._settings.learning_objective_settings.lstm_label_prediction):
                 new_json_file = os.path.join(self._settings.output_folder, VISIT_CONCEPT_TOKENIZER_FILE_NAME)
                 self._visit_concept_tokenizer.save_to_json(new_json_file)
 
