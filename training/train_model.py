@@ -277,7 +277,7 @@ class ModelTrainer:
         self._writer = SummaryWriter(self._settings.output_folder)
         self._load_checkpoint()
         start = self._epoch + 1
-        if (self._settings.training_settings.num_freeze_epochs >= self._epoch and
+        if (self._settings.training_settings.num_freeze_epochs >= (self._epoch + 1) and
                 self._settings.pretrained_model_folder is not None):
             logging.info("Freezing pre-trained model weights")
             self._model.freeze_non_head()
