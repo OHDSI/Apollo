@@ -1,15 +1,15 @@
 system:
   # Path where data was stored using the CdmProcessor class:
-  sequence_data_folder: /home/egill/github/ApolloR/plpResults/1/personSequence
+  sequence_data_folder: /PATH/TO/SEQUENCE/DATA/
 
   # Path where the model files will be written:
-  output_folder: /tmp/RtmpoXspCy/filebba239f1cbe2
+  output_folder: /PATH/TO/OUTPUT/
 
   # Path to a pre-trained model files to load. If empty, a new model will be created:
-  pretrained_model_folder: /home/egill/projects/preTrainingEHR/model
+  pretrained_model_folder: /PATH/TO/PRETRAINED/MODEL/
 
   # Batch size for training and testing: (default: 32)
-  batch_size: 8
+  batch_size: 32
 
   # Save the model every checkpoint_every epochs:
   checkpoint_every: 1
@@ -17,7 +17,7 @@ system:
   # If specified, load this specific epoch of the pretrained model. Else the last epoch is loaded:
   pretrained_epoch:
 
-  # if specified, load this specific epoch of the finetuned model. Else the last epoch is loaded:
+  # if specified, load this specific epoch of the finetuned model to use for prediction. Else the last epoch is loaded:
   finetuned_epoch:
 
   # Which writer to use, tensorboard or json
@@ -64,10 +64,10 @@ training:
   learning_rate: 3e-4
 
   # Weight decay for the Adam optimizer:
-  weight_decay: 1e-5
+  weight_decay: 0.0
 
   # If specified, the maximum number of batches to use for training. Use to evaluate effect of having fewer data:
-  max_batches: 1
+  max_batches: 
 
 model:
   # The maximum length of the input sequence: (default: 512)
