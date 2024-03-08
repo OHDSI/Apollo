@@ -106,7 +106,7 @@ class AbstractCdmDataProcessor(ABC):
         cdm_tables = {table: pq.read_table(os.path.join(self._settings.cdm_data_path, table, file_name)) for table in
                       available_tables}
         if self._settings.labels is not None:
-            if self._settings.labels:
+            if isinstance(self._settings.labels, bool):
                 labels = pq.read_table(os.path.join(self._settings.cdm_data_path,
                                                     "label", file_name))
             else:
