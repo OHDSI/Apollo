@@ -100,7 +100,7 @@ class BinaryPredictionPerformance:
                        epoch: int) -> None:
         label = "train" if train else "validation"
         label += " " + objective_label
-        logging.info("Epoch %d %s mean loss: %0.2f, AUC: %0.2f, AUPRC: %0.2f, Brier score: %0.2f",
+        logging.info("Epoch %d %s mean loss: %0.4f, AUC: %0.2f, AUPRC: %0.2f, Brier score: %0.2f",
                      epoch,
                      label,
                      self.get_mean_loss(),
