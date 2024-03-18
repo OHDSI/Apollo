@@ -220,7 +220,7 @@ class ModelTrainer:
         start_time = time.time()
         data_loader = DataLoader(dataset=dataset,
                                  batch_size=self._settings.batch_size,
-                                 num_workers=4,
+                                 num_workers=0,
                                  pin_memory=True)
         for inputs in tqdm(data_loader):
             if (self._settings.training_settings.max_batches is not None and
