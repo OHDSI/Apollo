@@ -321,15 +321,16 @@ def map_concepts(cdm_table: pa.Table, concept_id_field: str, mapping: pa.Table) 
     ).select(intermediate_columns).rename_columns(final_columns)
 
 
-def filter_prediction_problem(sequence_directory: str, labels: pd.DataFrame, analysis_path: str):
+def filter_prediction_problem(sequence_directory: str, labels: pd.DataFrame, analysis_path: str, name: str = "sequence"):
     """
     Filter existing sequences to prediction problem
     Args:
         sequence_directory: The directory containing the sequences.
         labels: The labels dataframe to use for filtering.
         analysis_path: The path where the filtered sequences should be saved.
+        name: The name of the folder to store sequences in.
     """
-    output_path = os.path.join(analysis_path, "sequences")
+    output_path = os.path.join(analysis_path, name)
     if not os.path.exists(output_path):
         os.makedirs(output_path)
     # extract parquet files from sequence directory
