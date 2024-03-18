@@ -321,7 +321,7 @@ def map_concepts(cdm_table: pa.Table, concept_id_field: str, mapping: pa.Table) 
     ).select(intermediate_columns).rename_columns(final_columns)
 
 
-def filter_prediction_problem(sequence_directory: str, labels: pd.DataFrame, analysis_path: str, name: str = "sequence"):
+def filter_prediction_problem(sequence_directory: str, labels: pd.DataFrame, analysis_path: str, name: str = "sequences"):
     """
     Filter existing sequences to prediction problem
     Args:
