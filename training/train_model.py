@@ -90,6 +90,8 @@ class ModelTrainer:
         if settings.model_settings.visit_concept_embedding:
             self._visit_concept_tokenizer = self._get_concept_tokenizer(file_name=VISIT_CONCEPT_TOKENIZER_FILE_NAME,
                                                                         field_name=DataNames.VISIT_CONCEPT_IDS)
+        else:
+            self._visit_concept_tokenizer = None
 
         # Get learning objectives:
         self._learning_objectives = self.initialize_learning_objectives()

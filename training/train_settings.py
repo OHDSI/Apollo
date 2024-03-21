@@ -6,7 +6,7 @@ from typing import Optional, Dict, Any
 
 from torch.utils.tensorboard import SummaryWriter
 
-from model.model_settings import ModelSettings
+from model.model_settings import ModelSettings, SimpleModelSettings
 from utils.results import Results, JsonWriter
 
 
@@ -53,7 +53,7 @@ class ModelTrainingSettings:
     checkpoint_every: Optional[int]
     training_settings: TrainingSettings
     learning_objective_settings: LearningObjectiveSettings
-    model_settings: ModelSettings
+    model_settings: [ModelSettings, SimpleModelSettings]
     pretrained_model_folder: Optional[str] = None
     pretrained_epoch: Optional[int] = None
     finetuned_epoch: Optional[int] = None
@@ -70,7 +70,10 @@ class ModelTrainingSettings:
             setattr(self, key, value)
         self.learning_objective_settings = LearningObjectiveSettings(**config["learning_objectives"])
         self.training_settings = TrainingSettings(**config["training"])
-        self.model_settings = ModelSettings(**config["model"])
+        if not self.learning_objective_settings.simple_regression_model:
+            self.model_settings = ModelSettings(**config["model"])
+        else:
+            self.model_settings = SimpleModelSettings(**config["model"])
         self.__post_init__()
 
     def getwriter(self, value):
@@ -92,7 +95,7 @@ class ModelTrainingSettings:
         if self.learning_objective_settings.next_token_prediction and not self.model_settings.concept_embedding:
             raise ValueError("Must have concept embedding if next_token_prediction is true")
         if self.learning_objective_settings.simple_regression_model:
-            if self.learning_objective_settings.label_prediction:
+            if not self.learning_objective_settings.label_prediction:
                 raise ValueError("Must have label prediction if simple_regression_model is true")
             if (self.learning_objective_settings.masked_concept_learning or
                     self.learning_objective_settings.masked_visit_concept_learning):
