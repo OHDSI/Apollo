@@ -110,7 +110,7 @@ class AbstractCdmDataProcessor(ABC):
                 labels = pq.read_table(os.path.join(self._settings.cdm_data_path,
                                                     "label", file_name))
             else:
-                labels = pq.read_table(self._settings.labels)
+                labels = pq.read_table(os.path.join(self._settings.labels, file_name))
         else:
             labels = None
         self._process_partition_cdm_data(cdm_tables=cdm_tables, labels=labels, partition_i=partition_i)

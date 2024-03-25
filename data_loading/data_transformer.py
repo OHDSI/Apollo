@@ -57,6 +57,8 @@ class ApolloDataTransformer:
         for learning_objective in self._learning_objectives:
             inputs = learning_objective.process_row(row, begin_index, end_index, self._max_sequence_length)
             all_inputs.update(inputs)
+        all_inputs.update({"ages": max(row["ages"])})
+        all_inputs.update({"person_id": row["person_id"]})
         return all_inputs
 
     def _create_begin_end_indices(self, row: Dict) -> tuple[int, int]:

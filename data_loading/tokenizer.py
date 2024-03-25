@@ -54,6 +54,15 @@ class ConceptTokenizer:
                 result[i] = idx
         return result
 
+    def encode_fast(self, concept_ids: List[List[str]]) -> NDArray[np.int64]:
+        # Create a vectorized function to map concept IDs to indices
+        oov_token = self._oov_token_index
+        vectorized_get = np.vectorize(lambda x: self._word_index.get(x, oov_token))
+        # Apply the vectorized function to the concept_ids array
+        result = vectorized_get(concept_ids)
+        return result
+
+
     def decode(self, concept_token_ids: List[int]) -> List[str]:
         return [self._index_word.get(i) for i in concept_token_ids]
 

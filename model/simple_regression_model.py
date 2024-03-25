@@ -8,7 +8,7 @@ from typing import Dict
 import torch
 from torch import nn, Tensor
 
-from data_loading.tokenizer import ConceptTokenizer
+from data_loading.tokenizer import ConceptTokenizer, load_from_json
 from data_loading.variable_names import ModelInputNames, ModelOutputNames
 from model.model_settings import ModelSettings
 from training.train_settings import LearningObjectiveSettings
