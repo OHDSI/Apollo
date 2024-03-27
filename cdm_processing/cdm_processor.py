@@ -90,7 +90,7 @@ class CdmDataProcessor(AbstractCdmDataProcessor):
         con.register("observation_period_table", cdm_tables["observation_period"])
         con.register("person", cdm_tables["person"])
         con.register("event_table", event_table)
-        if self._settings.label_sub_folder is not None:
+        if self._settings.labels is not None:
             con.register("labels", labels)
         sql = "CREATE TABLE visits AS " \
               "SELECT visit_occurrence.*, " \
@@ -170,8 +170,12 @@ class CdmDataProcessor(AbstractCdmDataProcessor):
               "INNER JOIN person " \
               "  ON visits.person_id = person.person_id"
         con.execute(sql)
-        if self._settings.label_sub_folder is not None:
-            part1 = "  label, "
+        if self._settings.labels is not None:
+            label_columns = con.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'labels'")
+            if "is_training" in label_columns.arrow()["column_name"].to_pylist():
+                part1 = "  is_training,  label, "
+            else:
+                part1 = "  label, "
             part2 = "  INNER JOIN labels ON tokens.observation_period_id = labels.observation_period_id "
         else:
             part1 = ""
@@ -220,9 +224,10 @@ class CdmDataProcessor(AbstractCdmDataProcessor):
                      "orders",
                      "num_of_concepts",
                      "num_of_visits"]
-        if self._settings.label_sub_folder is not None:
-            aggregate_list.append(("label", "any"))
-            name_list.append("label")
+        if self._settings.labels is not None:
+            columns_to_add = part1.strip(" ,").split(", ")
+            aggregate_list.extend([(column.strip(), "any") for column in columns_to_add])
+            name_list.extend([column.strip() for column in columns_to_add])
         sequence_data = union_tokens.group_by("observation_period_id"). \
             aggregate(aggregate_list). \
             rename_columns(name_list)

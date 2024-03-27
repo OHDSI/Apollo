@@ -17,6 +17,7 @@ import torch
 from torch import optim
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
 
 import utils.logger as logger
 from data_loading.model_inputs import InputTransformer
@@ -28,7 +29,7 @@ import data_loading.learning_objectives as learning_objectives
 import data_loading.tokenizer as tokenizer
 from data_loading.variable_names import DataNames
 from model.model import TransformerModel
-from utils.results import Results
+from utils.results import Results, JsonWriter
 
 LOGGER_FILE_NAME = "_model_training_log.txt"
 BATCH_REPORT_INTERVAL = 1000
@@ -81,7 +82,7 @@ class ModelTrainer:
         os.makedirs(settings.output_folder, exist_ok=True)
         self._configure_logger()
         logger.log_settings(settings)
-        self._writer: Optional[SummaryWriter] = None
+        self._writer: Optional[SummaryWriter] = settings.writer
 
         # Get concept tokenizers:
         self._concept_tokenizer = self._get_concept_tokenizer(file_name=CONCEPT_TOKENIZER_FILE_NAME,
@@ -89,6 +90,8 @@ class ModelTrainer:
         if settings.model_settings.visit_concept_embedding:
             self._visit_concept_tokenizer = self._get_concept_tokenizer(file_name=VISIT_CONCEPT_TOKENIZER_FILE_NAME,
                                                                         field_name=DataNames.VISIT_CONCEPT_IDS)
+        else:
+            self._visit_concept_tokenizer = None
 
         # Get learning objectives:
         self._learning_objectives = self.initialize_learning_objectives()
@@ -178,17 +181,23 @@ class ModelTrainer:
                                                  input_transformer=input_transformer,
                                                  max_sequence_length=self._settings.model_settings.max_sequence_length,
                                                  truncate_type=self._settings.learning_objective_settings.truncate_type)
-        if self._settings.training_settings.train_fraction < 1.0:
+        if ((isinstance(self._settings.training_settings.train_fraction, (float, int)) and
+             self._settings.training_settings.train_fraction < 1.0)
+                or self._settings.training_settings.train_fraction == "plp"):
             test_data = ApolloDataset(folder=self._settings.sequence_data_folder,
                                       data_transformer=data_transformer,
                                       train_test_split=self._settings.training_settings.train_fraction,
+                                      output_folder=self._settings.output_folder,
                                       is_train=False)
         else:
             test_data = None
-        if self._settings.training_settings.train_fraction > 0.0:
+        if ((isinstance(self._settings.training_settings.train_fraction, (float, int)) and
+             self._settings.training_settings.train_fraction > 0.0)
+                or self._settings.training_settings.train_fraction == "plp"):
             train_data = ApolloDataset(folder=self._settings.sequence_data_folder,
                                        data_transformer=data_transformer,
                                        train_test_split=self._settings.training_settings.train_fraction,
+                                       output_folder=self._settings.output_folder,
                                        is_train=True)
         else:
             train_data = None
@@ -213,9 +222,9 @@ class ModelTrainer:
         start_time = time.time()
         data_loader = DataLoader(dataset=dataset,
                                  batch_size=self._settings.batch_size,
-                                 num_workers=4,
+                                 num_workers=0,
                                  pin_memory=True)
-        for inputs in data_loader:
+        for inputs in tqdm(data_loader):
             if (self._settings.training_settings.max_batches is not None and
                     batch_count >= self._settings.training_settings.max_batches):
                 logging.info("Reached maximum number of batches specified by user, stopping")
@@ -254,7 +263,7 @@ class ModelTrainer:
 
         for learning_objective in self._learning_objectives:
             learning_objective.report_performance_metrics(train, self._writer, self._epoch)
-        if self._writer is not None:
+        if isinstance(self._writer, SummaryWriter):
             self._writer.flush()
 
     def train_model(self) -> None:
@@ -274,7 +283,6 @@ class ModelTrainer:
 
         logging.info("Performing computations on device: %s", self._device.type)
         logging.info("Total parameters: {:,} ".format(sum([param.nelement() for param in self._model.parameters()])))
-        self._writer = SummaryWriter(self._settings.output_folder)
         self._load_checkpoint()
         start = self._epoch + 1
         if (self._settings.training_settings.num_freeze_epochs >= (self._epoch + 1) and
@@ -294,11 +302,17 @@ class ModelTrainer:
             if self._model.is_frozen() and self._epoch >= self._settings.training_settings.num_freeze_epochs:
                 logging.info("Unfreezing pre-trained model weights")
                 self._model.unfreeze_all()
+        if isinstance(self._writer, JsonWriter):
+            self._writer.flush()
 
     def evaluate_model(self, result_file: str, epoch: Optional[int] = None) -> None:
         if epoch is not None:
             self._load_model(file_name=os.path.join(self._settings.output_folder, _get_file_name(epoch)),
                              pretrained=True)
+        if self._settings.finetuned_epoch is not None:
+            self._load_model(file_name=os.path.join(self._settings.output_folder,
+                                                    _get_file_name(self._settings.finetuned_epoch)),
+                             pretrained=False)
         else:
             self._load_checkpoint()
         self._run_model(train=False)
@@ -321,7 +335,7 @@ class ModelTrainer:
     def _load_model(self, file_name: str, pretrained: bool = False) -> None:
         loaded = torch.load(file_name, map_location=self._device)
         self._model.load_state_dict(loaded["model_state_dict"], strict=not pretrained)
-        if not pretrained:
+        if not pretrained and not self._settings.learning_objective_settings.predict_new:
             self._optimizer.load_state_dict(loaded["optimizer_state_dict"])
             self._epoch = loaded["epoch"]
 

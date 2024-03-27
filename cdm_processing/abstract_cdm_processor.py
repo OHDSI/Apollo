@@ -105,9 +105,12 @@ class AbstractCdmDataProcessor(ABC):
         available_tables = [table for table in CDM_TABLES if table in os.listdir(self._settings.cdm_data_path)]
         cdm_tables = {table: pq.read_table(os.path.join(self._settings.cdm_data_path, table, file_name)) for table in
                       available_tables}
-        if self._settings.label_sub_folder is not None:
-            labels = pq.read_table(os.path.join(self._settings.cdm_data_path,
-                                                self._settings.label_sub_folder, file_name))
+        if self._settings.labels is not None:
+            if isinstance(self._settings.labels, bool):
+                labels = pq.read_table(os.path.join(self._settings.cdm_data_path,
+                                                    "label", file_name))
+            else:
+                labels = pq.read_table(os.path.join(self._settings.labels, file_name))
         else:
             labels = None
         self._process_partition_cdm_data(cdm_tables=cdm_tables, labels=labels, partition_i=partition_i)

@@ -24,3 +24,14 @@ class ModelSettings:
             raise ValueError(f"Invalid hidden_act: {self.hidden_act}")
         if self.embedding_combination_method not in ["concat", "sum"]:
             raise ValueError(f"Invalid embedding_combination_method: {self.embedding_combination_method}")
+
+
+@dataclass
+class SimpleModelSettings:
+    max_sequence_length: int
+    concept_embedding: bool
+    visit_order_embedding: bool
+    segment_embedding: bool
+    age_embedding: bool
+    date_embedding: bool
+    visit_concept_embedding: bool

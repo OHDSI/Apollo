@@ -18,7 +18,7 @@ class CdmProcessingSettings:
     output_path: str
     mapping_settings: MappingSettings
     profile: bool
-    label_sub_folder: Optional[str] = None
+    labels: Optional[str] = None
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         if config is None:

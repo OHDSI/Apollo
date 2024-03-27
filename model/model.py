@@ -65,7 +65,7 @@ class TransformerModel(nn.Module):
         # Encoder:
         encoder_layers = TransformerEncoderLayer(d_model=model_settings.hidden_size,
                                                  nhead=model_settings.num_attention_heads,
-                                                 dim_feedforward=model_settings.max_sequence_length,
+                                                 dim_feedforward=model_settings.intermediate_size,
                                                  dropout=model_settings.hidden_dropout_prob,
                                                  activation=model_settings.hidden_act,
                                                  batch_first=True)

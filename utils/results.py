@@ -1,5 +1,7 @@
 import csv
-from typing import List
+import json
+import os
+from typing import List, Optional
 
 
 class Results:
@@ -21,3 +23,40 @@ class Results:
                     writer.writerow([row[i] for row in self._values])
             else:
                 writer.writerow(self._values)
+
+
+class JsonWriter:
+    def __init__(self, file_name: Optional[str] = None):
+        self._file_name = file_name
+        self.previous = 0
+        self.metrics_list = []
+
+    def add_metrics(self, epochs: int, metrics: dict):
+        if self.metrics_list:
+            for metric in self.metrics_list:
+                if metric["epochs"] == epochs:
+                    metric["metrics"].update(metrics)
+                    return
+            self.metrics_list.append({"epochs": epochs, "metrics": metrics})
+        else:
+            self.metrics_list.append({"epochs": epochs, "metrics": metrics})
+
+    def flush(self):
+        if self._file_name:
+            if os.path.isfile(self._file_name):
+                self.append_metrics()
+            self.write_metrics()
+        else:
+            raise ValueError("No file name specified for json writer")
+
+    def append_metrics(self):
+        previous_metrics = self.load_metrics()
+        self.metrics_list = previous_metrics + self.metrics_list
+
+    def load_metrics(self):
+        with open(self._file_name, "r", encoding="UTF8", newline="") as f:
+            return json.load(f)
+
+    def write_metrics(self):
+        with open(self._file_name, "w", encoding="UTF8", newline="") as f:
+            f.write(json.dumps(self.metrics_list, indent=4))

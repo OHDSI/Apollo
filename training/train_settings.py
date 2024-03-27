@@ -1,8 +1,13 @@
+import os
+
 import yaml
 from dataclasses import dataclass, asdict
 from typing import Optional, Dict, Any
 
-from model.model_settings import ModelSettings
+from torch.utils.tensorboard import SummaryWriter
+
+from model.model_settings import ModelSettings, SimpleModelSettings
+from utils.results import Results, JsonWriter
 
 
 @dataclass
@@ -32,6 +37,12 @@ class TrainingSettings:
     num_freeze_epochs: int = 0
     max_batches: Optional[int] = None
 
+    def __post_init__(self):
+        # needed if these fields are provided in scientific notation
+        if not isinstance(self.learning_rate, float):
+            self.learning_rate = float(self.learning_rate)
+        if not isinstance(self.weight_decay, float):
+            self.weight_decay = float(self.weight_decay)
 
 @dataclass
 class ModelTrainingSettings:
@@ -42,21 +53,38 @@ class ModelTrainingSettings:
     checkpoint_every: Optional[int]
     training_settings: TrainingSettings
     learning_objective_settings: LearningObjectiveSettings
-    model_settings: ModelSettings
+    model_settings: [ModelSettings, SimpleModelSettings]
     pretrained_model_folder: Optional[str] = None
     pretrained_epoch: Optional[int] = None
+    finetuned_epoch: Optional[int] = None
     prediction_output_file: Optional[str] = None
+    writer: [SummaryWriter, Results, JsonWriter, None] = None
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         if config is None:
             return
         system = config["system"]
         for key, value in system.items():
+            if key == "writer":
+                value = self.getwriter(value)
             setattr(self, key, value)
         self.learning_objective_settings = LearningObjectiveSettings(**config["learning_objectives"])
         self.training_settings = TrainingSettings(**config["training"])
-        self.model_settings = ModelSettings(**config["model"])
+        if not self.learning_objective_settings.simple_regression_model:
+            self.model_settings = ModelSettings(**config["model"])
+        else:
+            self.model_settings = SimpleModelSettings(**config["model"])
         self.__post_init__()
+
+    def getwriter(self, value):
+        if value == "tensorboard":
+            return SummaryWriter()
+        elif value == "results":
+            return Results()
+        elif value == "json":
+            return JsonWriter(os.path.join(self.output_folder, "metrics.json"))
+        else:
+            raise ValueError(f"Invalid writer: {value}")
 
     def __post_init__(self):
         if self.learning_objective_settings.masked_concept_learning and not self.model_settings.concept_embedding:
@@ -67,7 +95,7 @@ class ModelTrainingSettings:
         if self.learning_objective_settings.next_token_prediction and not self.model_settings.concept_embedding:
             raise ValueError("Must have concept embedding if next_token_prediction is true")
         if self.learning_objective_settings.simple_regression_model:
-            if self.learning_objective_settings.label_prediction:
+            if not self.learning_objective_settings.label_prediction:
                 raise ValueError("Must have label prediction if simple_regression_model is true")
             if (self.learning_objective_settings.masked_concept_learning or
                     self.learning_objective_settings.masked_visit_concept_learning):

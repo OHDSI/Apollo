@@ -1,15 +1,16 @@
 system:
   # Path where data was stored using the GeneralPretrainedModelTools package:
-  cdm_data_path: d:/GPM_Sim/pretraining
+  cdm_data_path: /PATH/TO/CDM/DATA
+
   
-  # If the data has labels, what is the name of the sub folder?:
-  label_sub_folder:
+  # If the data has labels, either a subfolder in cdm_data_path or a path to the labels file:
+  labels: true
   
   # Maximum number of CPU cores to use:
-  max_cores: 5
+  max_cores: 1
   
   # Path where the person sequence data will be written:
-  output_path: d:/GPM_Sim/pretraining/person_sequence
+  output_path: /PATH/TO/SEQUENCE/DATA
 
 
 mapping:

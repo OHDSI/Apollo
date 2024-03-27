@@ -1,6 +1,7 @@
 import os
 from typing import List, Dict
 
+import pandas as pd
 import pyarrow.parquet as pq
 import pyarrow.compute as pc
 import pyarrow as pa
@@ -167,6 +168,9 @@ def link_events_to_visits(event_table: pa.Table,
         table with an additional internal_visit_id column and added visits if some events could not be mapped to
         existing visits, and (3) a dataframe with the number of visits mapped by ID, data, or to new visits.
     """
+    # Filter out visits that are not in the event table
+    visit_occurrence = visit_occurrence.filter(pc.is_in(pc.field(VISIT_OCCURRENCE_ID), event_table[VISIT_OCCURRENCE_ID]))
+
     # DuckDb seems to be the fastest way (by far) to do these join, especially the one on dates
     visit_occurrence = visit_occurrence.append_column("internal_visit_id",
                                                       pa.array(range(len(visit_occurrence)), pa.int64()))
@@ -318,3 +322,37 @@ def map_concepts(cdm_table: pa.Table, concept_id_field: str, mapping: pa.Table) 
         right_keys=[SOURCE_CONCEPT_ID],
         join_type="inner",
     ).select(intermediate_columns).rename_columns(final_columns)
+
+
+def filter_prediction_problem(sequence_directory: str, labels: pd.DataFrame, analysis_path: str, name: str = "sequences"):
+    """
+    Filter existing sequences to prediction problem
+    Args:
+        sequence_directory: The directory containing the sequences.
+        labels: The labels dataframe to use for filtering.
+        analysis_path: The path where the filtered sequences should be saved.
+        name: The name of the folder to store sequences in.
+    """
+    output_path = os.path.join(analysis_path, name)
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+    # extract parquet files from sequence directory
+    parquet_files = [f for f in os.listdir(sequence_directory) if f.endswith('.parquet')]
+    labels = pa.Table.from_pandas(labels)
+    # cast column rowId in labels from double to int64
+    schema = pa.schema([
+        ("rowId", pa.int64()),
+        ("outcomeCount", pa.bool_()),
+        ("is_training", pa.bool_())
+    ])
+    labels = labels.cast(schema)
+    labels = labels.rename_columns(['rowId', 'label', 'is_training'])
+    con = duckdb.connect(database=':memory:', read_only=False)
+    con.execute("SET enable_progress_bar = false")
+    con.register("labels", labels)
+    for parquet_file in parquet_files:
+        con.execute(f"CREATE VIEW sequence AS SELECT * FROM read_parquet('{os.path.join(sequence_directory, parquet_file)}')")
+        # join with labels on observation_period_id = rowId
+        con.query(f"COPY (SELECT * EXCLUDE (rowId) FROM sequence JOIN labels ON observation_period_id = rowId ORDER BY observation_period_id) "
+                  f"TO '{os.path.join(output_path, parquet_file)}' (FORMAT PARQUET)")
+        con.execute("DROP VIEW sequence")
